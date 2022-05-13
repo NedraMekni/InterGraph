@@ -1,24 +1,104 @@
-# Script to create Proximity Interaction Graphs.
-# Author: Marc Moesser
-# This script uses adapted functions from the ECIF script supplied in https://github.com/DIFACQUIM/ECIF
-
+import os.path
+import pandas as pd
+import os
+import pickle
+import urllib
 import pandas as pd
 import numpy as np
 import networkx as nx
+import openbabel
+
+from tqdm import tqdm
+from rdkit import Chem
 from scipy.spatial.distance import cdist
 from itertools import product
+from openbabel import openbabel
+
+pdb_raw_d = "../data/" + "pdb_raw"
+
+
+def file_path():
+    global pdb_raw_d
+    if not os.path.exists("../data/" + "data"):
+        os.makedirs("../data/" + "data")
+    if not os.path.exists("../data/" + "pdb_raw"):
+        os.makedirs("../data/" + "pdb_raw")
+
+
+def get_pdb_components(pdb_id):
+    global pdb_raw_d
+
+    pdb_r = urllib.request.urlretrieve(
+        "https://files.rcsb.org/download/{}.pdb".format(pdb_id),
+        "{}/{}.pdb".format(pdb_raw_d, pdb_id),
+    )
+
+
+def parsePDB(lig, filename):
+    prot = []
+    ligs = []
+
+    with open(filename, "r") as f:
+        for l in f:
+            if l.split()[0] == "ATOM":
+                prot += [l]
+            if len(l.split()) > 3 and l.split()[3] == lig:
+                ligs += [l]
+
+    return prot, ligs
+
+
+def write_pdb(prot, lig, filename):
+    with open(filename, "w") as f:
+        for l in prot:
+            f.write(l)
+            f.write("TER\n")
+        for l in lig:
+            f.write(l)
+
+
+def write_ligand_pdb(lig, filename):
+
+    with open(filename, "w") as f:
+        for l in lig:
+            l.split(",")
+            f.write(l)
+            return f
+
+
+def load_structures():
+    raw_data = "data"
+    list_of_pdbcodes = [i for i in os.listdir(raw_data)]
+    Atom_Keys = pd.read_csv("../data/csv/PDB_Atom_Keys.csv", sep=",")
+
+    for pdb in tqdm(list_of_pdbcodes):
+        lig_path = os.path.join(raw_data, pdb, f"{pdb[-3:]}.mol2")
+        protein_path = os.path.join(raw_data, pdb, f"{pdb}.pdb")
+
+        # load the ligand and handle invalid mol2 file
+        try:
+            c_mol = Chem.AddHs(
+                Chem.MolFromMol2File(
+                    lig_path, sanitize=False, removeHs=True, cleanupSubstructures=True
+                ),
+                addCoords=True,
+            )
+            print("Mol from Mol2 conversion succeded  ", lig_path)
+        except:
+            print("Mol from Mol2 conversion failed ", lig_path)
+            continue
+
+        # 6 Angstrom
+        mol_graphs_crystal_6A = {}
+        contacts_6A = GetAtomContacts(
+            protein_path, c_mol, Atom_Keys, distance_cutoff=6.0
+        )
+        graph_c_6 = mol_to_graph(c_mol, contacts_6A, Atom_Keys)
+        mol_graphs_crystal_6A[pdb] = graph_c_6
+        return mol_graphs_crystal_6A
 
 
 def GetAtomType(atom):
-    # Atom types are defined as follows:
-    # 1) Atom symbol
-    # 2) Explicit Valence
-    # 3) # Heavy Atom Neighbors
-    # 4) # Hydrogen Neighbors
-    # 5) Boolean: Is atom aromatic?
-    # 6) Boolean: is atom in a ring?
-
-    # This function can be used to identify all unique protein atom types in the dataset.
 
     AtomType = [
         atom.GetSymbol(),
@@ -33,7 +113,6 @@ def GetAtomType(atom):
 
 
 def LoadSDFasDF(mol):
-    # This function converts the input ligand (.MOL file) into a pandas DataFrame with the ligand atom position in 3D (X,Y,Z)
 
     m = mol
 
@@ -99,11 +178,10 @@ def LoadPDBasDF(PDB, Atom_Keys):
     return df
 
 
+# This function returns the list of protein atom types the ligand interacts with for a given distance cutoff
+# cutoff = 6 Angstrom is standard
 def GetAtomContacts(PDB_protein, mol, Atom_Keys, distance_cutoff=6.0):
-    # This function returns the list of protein atom types the ligand interacts with for a given distance cutoff
-    # cutoff = 6 Angstrom is standard
 
-    # Protein and ligand structure are loaded as pandas DataFrame
     Target = LoadPDBasDF(PDB_protein, Atom_Keys)
     Ligand = LoadSDFasDF(mol)
 
@@ -144,13 +222,6 @@ def atom_features(
         "is_in_ring",
     ],
 ):
-    # Computes the ligand atom features for graph node construction
-    # The standard features are the following:
-    # num_heavy_atoms = # of heavy atom neighbors
-    # total_num_Hs = # number of hydrogen atom neighbors
-    # explicit_valence = explicit valence of the atom
-    # is_aromatic = boolean 1 - aromatic, 0 - not aromatic
-    # is_in_ring = boolean 1 - is in ring, 0 - is not in ring
 
     feature_list = []
     if "num_heavy_atoms" in features:
@@ -161,7 +232,7 @@ def atom_features(
         feature_list.append(
             len([x.GetSymbol() for x in atom.GetNeighbors() if x.GetSymbol() == "H"])
         )
-    if "explicit_valence" in features:  # -NEW ADDITION FOR PLIG
+    if "explicit_valence" in features:
         feature_list.append(atom.GetExplicitValence())
     if "is_aromatic" in features:
 
@@ -177,8 +248,8 @@ def atom_features(
     return np.array(feature_list)
 
 
+# Generates the protein-ligand interaction features for the PLIG creation
 def atom_features_PLIG(atom_idx, atom, contact_df, extra_features, Atom_Keys):
-    # Generates the protein-ligand interaction features for the PLIG creation
 
     possible_contacts = list(dict.fromkeys(Atom_Keys["ATOM_TYPE"]))
     feature_list = np.zeros(len(possible_contacts), dtype=int)
@@ -208,18 +279,6 @@ def mol_to_graph(
         "is_in_ring",
     ],
 ):
-    # Final function to summarize the generation of PLIGS
-
-    # Extra features are any extra features to be added to the protein-ligand interaction features.
-    # In this work, we use the following ligand-based features as the ligand atom node features that are added to the interaction features:
-
-    # num_heavy_atoms
-    # total_num_hs
-    # explicit_valence
-    # is_aromatic
-    # is_in_ring
-
-    # However, this is freely customizable! Any additional features can be added here.
 
     c_size = len([x.GetSymbol() for x in mol.GetAtoms() if x.GetSymbol() != "H"])
     features = []
@@ -254,3 +313,92 @@ def mol_to_graph(
 
     # return molecular graph with its node features and edge indices
     return c_size, features, edge_index
+
+
+# Save structure in PDB and mol2 format
+def save_structure(fname):
+    global pdb_raw_d
+    pdb_prot_downloaded = []
+    with open(fname, "r") as f:
+        lines = f.readlines()[1:]
+        for l in lines:
+            # print(l)
+            pdb_prot_list, pdb_lig = (
+                l.strip().split(",")[2].strip(),
+                l.strip().split(",")[3].strip(),
+            )
+            pdb_prot_list = [x[:4] for x in pdb_prot_list.split()]
+
+            # print(pdb_lig_list)
+            # print(pdb_prot_list)
+
+            for pdb_prot in pdb_prot_list:
+                if pdb_prot not in pdb_prot_downloaded:
+                    x = get_pdb_components(pdb_prot)
+                    pdb_prot_downloaded += [pdb_prot]
+
+                prot, lig = parsePDB(pdb_lig, pdb_raw_d + "/" + pdb_prot + ".pdb")
+
+                if not os.path.exists("../data/PDB/data/" + pdb_prot + "_" + pdb_lig):
+                    os.makedirs("../data/PDB/data/" + pdb_prot + "_" + pdb_lig)
+                    write_pdb(
+                        prot,
+                        lig,
+                        "../data/PDB/data/"
+                        + pdb_prot
+                        + "_"
+                        + pdb_lig
+                        + "/"
+                        + pdb_prot
+                        + "_"
+                        + pdb_lig
+                        + ".pdb",
+                    )
+                    if not os.path.exists(
+                        "../data/PDB/data/"
+                        + pdb_prot
+                        + "_"
+                        + pdb_lig
+                        + "/"
+                        + pdb_lig
+                        + ".pdb"
+                    ):
+                        write_ligand_pdb(
+                            lig,
+                            "../data/PDB/data/"
+                            + pdb_prot
+                            + "_"
+                            + pdb_lig
+                            + "/"
+                            + pdb_lig
+                            + ".pdb",
+                        )
+
+                        for file in os.listdir(
+                            "../data/PDB/data/" + pdb_prot + "_" + pdb_lig + "/"
+                        ):
+                            if file.endswith(f"{pdb_lig}.pdb"):
+                                file_path = (
+                                    "../data/PDB/data/"
+                                    + pdb_prot
+                                    + "_"
+                                    + pdb_lig
+                                    + "/"
+                                    + pdb_lig
+                                    + ".pdb"
+                                )
+                                obConversion = openbabel.OBConversion()
+                                obConversion.SetInAndOutFormats("pdb", "mol2")
+                                mol = openbabel.OBMol()
+                                obConversion.ReadFile(mol, file_path)
+                                mol.AddHydrogens()
+                                obConversion.WriteFile(
+                                    mol,
+                                    "../data/PDB/data/"
+                                    + pdb_prot
+                                    + "_"
+                                    + pdb_lig
+                                    + "/"
+                                    + f"{pdb_lig}.mol2",
+                                )  # else:
+                    # print("The write is skipped")

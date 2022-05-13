@@ -1,8 +1,5 @@
 import os
-import pypdb
 import urllib
-
-# from prody import *
 
 import openbabel
 from openbabel import openbabel
@@ -54,6 +51,7 @@ def write_ligand_pdb(lig, filename):
         for l in lig:
             l.split(",")
             f.write(l)
+            return f
 
 
 if __name__ == "__main__":
@@ -72,7 +70,6 @@ if __name__ == "__main__":
             pdb_prot_list = [x[:4] for x in pdb_prot_list.split()]
 
             # print(pdb_lig_list)
-
             # print(pdb_prot_list)
 
             for pdb_prot in pdb_prot_list:

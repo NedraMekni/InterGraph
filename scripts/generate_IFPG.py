@@ -7,12 +7,13 @@ Original file is located at
 import os.path
 import pandas as pd
 import os
+import pickle
 from tqdm import tqdm
 from rdkit import Chem
-import pickle
+
 
 # import functions from PLIG utilities script
-from PLIG_utils import *
+from InterGraph.PLIG_utils import *
 
 # load in data PDB files
 

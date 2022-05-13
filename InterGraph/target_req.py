@@ -1,8 +1,6 @@
 import requests
-from html.parser import HTMLParser
 import json
 import string
-from tqdm import tqdm
 
 from chembl_webresource_client.new_client import new_client
 
@@ -13,6 +11,7 @@ LIMIT_TARGET = 1
 
 
 def chembl_comp_to_pdb(chembl_compound_id: str) -> str:
+
     chembl_q = (
         f"https://www.ebi.ac.uk/unichem/rest/src_compound_id/{chembl_compound_id}/1/3"
     )
@@ -29,6 +28,7 @@ def chembl_comp_to_pdb(chembl_compound_id: str) -> str:
         return None
     else:
         return n[0]["src_compound_id"]
+    return n_target
 
 
 def check_uniprot(uniprot_id):
@@ -50,13 +50,9 @@ Create csv data_from_chembl file
 
 
 def retrieve_chembl_data():
-
+    global target, activity, LIMIT_TARGET
+    
     r, results = [], []
-
-    # after this loop in result we get the protein class id with all tags(l1-l2-l3....l8)
-
-    # print(parser.results)
-
     f = open("data_from_chembl.csv", "w")
     f.write(
         "target_chembl_id, target_uniprot_id, pref_name, canonical_smiles, IC50 uM, assay_chembl_id, molecule_chembl_id\n"
@@ -108,35 +104,10 @@ def retrieve_chembl_data():
             )
 
         if count_target == LIMIT_TARGET:
+
             break
         count_target += 1
 
     print("FILE CREATED")
     f.close()
     return results
-
-
-def retrieve_pdb_data(compounds):
-
-    f = open("raw_data.csv", "w")
-    f.write(
-        "target_chembl_id, target_uniprot_id, pref_name, canonical_smiles, IC50 uM, molecule_chembl_id, assay_chembl_id, pdb_comp_id\n"
-    )
-
-    print("retrieving ", len(compounds))
-
-    ligand_dict = {}
-
-    for c in tqdm(compounds):
-        if c[-1] not in ligand_dict.keys():
-            ligand_dict[c[-1]] = chembl_comp_to_pdb(c[-1])
-        # print(c)
-        f.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(*c, ligand_dict[c[-1]]))
-
-    f.close()
-
-
-if __name__ == "__main__":
-
-    compounds = retrieve_chembl_data()
-    retrieve_pdb_data(compounds)
