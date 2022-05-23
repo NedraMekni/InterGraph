@@ -2,39 +2,51 @@ import os.path
 import pandas as pd
 import os
 import pickle
-import urllib
+import urllib.request
 import pandas as pd
 import numpy as np
 import networkx as nx
 import openbabel
+import typing
+import numpy.typing as npt
+
 
 from tqdm import tqdm
 from rdkit import Chem
 from scipy.spatial.distance import cdist
 from itertools import product
 from openbabel import openbabel
+from typing import Tuple, Any, Dict
 
-pdb_raw_d = "../data/" + "pdb_raw"
+
+pdb_raw_d = "../data/pdb_raw"
 
 
 def file_path():
-    global pdb_raw_d
-    if not os.path.exists("../data/" + "data"):
-        os.makedirs("../data/" + "data")
-    if not os.path.exists("../data/" + "pdb_raw"):
-        os.makedirs("../data/" + "pdb_raw")
+    """
+    This function creates data and pdb_raw subdirectories
+    pdb_raw: unsplitted pdb
+    """
+
+    if not os.path.exists("../data/data"):
+        os.makedirs("../data/data")
+    if not os.path.exists("../data/pdb_raw"):
+        os.makedirs("../data/pdb_raw")
 
 
-def get_pdb_components(pdb_id):
-    global pdb_raw_d
+def get_pdb_components(pdb_id: str):
+
+    """This function performs an HTTPS request to get PDBs from rcsb.org"""
 
     pdb_r = urllib.request.urlretrieve(
         "https://files.rcsb.org/download/{}.pdb".format(pdb_id),
         "{}/{}.pdb".format(pdb_raw_d, pdb_id),
     )
+    return get_pdb_components
 
 
-def parsePDB(lig, filename):
+def parse_pdb(lig: str, filename: str) -> Tuple[list, list]:
+    """This function splits proten-ligand file into ligand and protein for each PDB in /data/pdb_raw"""
     prot = []
     ligs = []
 
@@ -48,7 +60,12 @@ def parsePDB(lig, filename):
     return prot, ligs
 
 
-def write_pdb(prot, lig, filename):
+def write_pdb(prot: str, lig: str, filename: str) -> None:
+    """
+    This function writes PDB file containing the protein complexed with the ligand of interest.
+    Water molecules, salts and metal ions are excluded
+    """
+
     with open(filename, "w") as f:
         for l in prot:
             f.write(l)
@@ -57,8 +74,8 @@ def write_pdb(prot, lig, filename):
             f.write(l)
 
 
-def write_ligand_pdb(lig, filename):
-
+def write_ligand_pdb(lig: str, filename: str):
+    """This function saves each ligand as a PDB file"""
     with open(filename, "w") as f:
         for l in lig:
             l.split(",")
@@ -66,10 +83,17 @@ def write_ligand_pdb(lig, filename):
             return f
 
 
-def load_structures():
+def load_structures() -> dict:
+    """
+    This function returns protein-ligand interaction graph.
+    The protein-ligand contact proximinity threashold it is set to 6Å
+    PDB_Atom_Keys.csv stores all possible protein atom types
+    reference: 10.1093/bioinformatics/btaa982
+    """
     raw_data = "data"
     list_of_pdbcodes = [i for i in os.listdir(raw_data)]
-    Atom_Keys = pd.read_csv("../data/csv/PDB_Atom_Keys.csv", sep=",")
+
+    atom_keys = pd.read_csv("../data/csv/PDB_Atom_Keys.csv", sep=",")
 
     for pdb in tqdm(list_of_pdbcodes):
         lig_path = os.path.join(raw_data, pdb, f"{pdb[-3:]}.mol2")
@@ -88,18 +112,19 @@ def load_structures():
             print("Mol from Mol2 conversion failed ", lig_path)
             continue
 
-        # 6 Angstrom
         mol_graphs_crystal_6A = {}
-        contacts_6A = GetAtomContacts(
-            protein_path, c_mol, Atom_Keys, distance_cutoff=6.0
+        contacts_6A = get_atom_contacts(
+            protein_path, c_mol, atom_keys, distance_cutoff=6.0
         )
-        graph_c_6 = mol_to_graph(c_mol, contacts_6A, Atom_Keys)
+        graph_c_6 = mol_to_graph(c_mol, contacts_6A, atom_keys)
         mol_graphs_crystal_6A[pdb] = graph_c_6
-        return mol_graphs_crystal_6A
+    print(type(mol_graphs_crystal_6A))
+    return mol_graphs_crystal_6A
 
 
-def GetAtomType(atom):
-
+def get_atom_type(atom: str) -> str:
+    exit()
+    """ This function identifies the unique protein atom types using rdkit modules"""
     AtomType = [
         atom.GetSymbol(),
         str(atom.GetExplicitValence()),
@@ -112,8 +137,8 @@ def GetAtomType(atom):
     return ";".join(AtomType)
 
 
-def LoadSDFasDF(mol):
-
+def load_sdf_as_df(mol):
+    """This function converts ligand mol2 file into pandas DataFrame"""
     m = mol
 
     atoms = []
@@ -130,16 +155,15 @@ def LoadSDFasDF(mol):
 
     df = pd.DataFrame(atoms)
     df.columns = ["ATOM_INDEX", "ATOM_TYPE", "X", "Y", "Z"]
-
     return df
 
 
-def LoadPDBasDF(PDB, Atom_Keys):
-    # This function converts a protein PDB file into a pandas DataFrame with the protein atom position in 3D (X,Y,Z)
+def load_pdb_as_df(pdb: str, atom_keys: str) -> pd.DataFrame:
+    """This function converts protein PDB file into a pandas DataFrame with the protein atom position in 3D (X,Y,Z)"""
 
     prot_atoms = []
 
-    f = open(PDB)
+    f = open(pdb)
     for i in f:
         if i[:4] == "ATOM":
             # Include only non-hydrogen atoms
@@ -165,7 +189,7 @@ def LoadPDBasDF(PDB, Atom_Keys):
 
     df = pd.DataFrame(prot_atoms, columns=["ATOM_INDEX", "PDB_ATOM", "X", "Y", "Z"])
     df = (
-        df.merge(Atom_Keys, left_on="PDB_ATOM", right_on="PDB_ATOM")[
+        df.merge(atom_keys, left_on="PDB_ATOM", right_on="PDB_ATOM")[
             ["ATOM_INDEX", "ATOM_TYPE", "X", "Y", "Z"]
         ]
         .sort_values(by="ATOM_INDEX")
@@ -178,38 +202,39 @@ def LoadPDBasDF(PDB, Atom_Keys):
     return df
 
 
-# This function returns the list of protein atom types the ligand interacts with for a given distance cutoff
-# cutoff = 6 Angstrom is standard
-def GetAtomContacts(PDB_protein, mol, Atom_Keys, distance_cutoff=6.0):
-
-    Target = LoadPDBasDF(PDB_protein, Atom_Keys)
-    Ligand = LoadSDFasDF(mol)
+def get_atom_contacts(pdb_protein, mol, atom_keys, distance_cutoff=6.0):
+    """
+    This function returns the list of protein atom types the ligand interacts with for a given distance cutoff
+    cutoff = 6 Angstrom
+    """
+    target = load_pdb_as_df(pdb_protein, atom_keys)
+    ligand = load_sdf_as_df(mol)
 
     # A cubic box around the ligand is created using the proximity threshold specified (here distance_cutoff = 6 Angstrom by default).
     for i in ["X", "Y", "Z"]:
-        Target = Target[Target[i] < float(Ligand[i].max()) + distance_cutoff]
-        Target = Target[Target[i] > float(Ligand[i].min()) - distance_cutoff]
+        target = target[target[i] < float(ligand[i].max()) + distance_cutoff]
+        target = target[target[i] > float(ligand[i].min()) - distance_cutoff]
 
     # Calculate the possible pairs
-    Pairs = list(product(Target["ATOM_TYPE"], Ligand["ATOM_INDEX"]))
-    Pairs = [str(x[0]) + "-" + str(x[1]) for x in Pairs]
-    Pairs = pd.DataFrame(Pairs, columns=["ATOM_PAIR"])
+    pairs = list(product(target["ATOM_TYPE"], ligand["ATOM_INDEX"]))
+    pairs = [str(x[0]) + "-" + str(x[1]) for x in pairs]
+    pairs = pd.DataFrame(pairs, columns=["ATOM_PAIR"])
 
-    Distances = cdist(
-        Target[["X", "Y", "Z"]], Ligand[["X", "Y", "Z"]], metric="euclidean"
+    distances = cdist(
+        target[["X", "Y", "Z"]], ligand[["X", "Y", "Z"]], metric="euclidean"
     )
-    Distances = Distances.reshape(Distances.shape[0] * Distances.shape[1], 1)
-    Distances = pd.DataFrame(Distances, columns=["DISTANCE"])
+    distances = distances.reshape(distances.shape[0] * distances.shape[1], 1)
+    distances = pd.DataFrame(distances, columns=["DISTANCE"])
 
     # Select pairs with distance lower than the cutoff
-    Pairs = pd.concat([Pairs, Distances], axis=1)
-    Pairs = Pairs[Pairs["DISTANCE"] <= distance_cutoff].reset_index(drop=True)
+    pairs = pd.concat([pairs, distances], axis=1)
+    pairs = pairs[pairs["DISTANCE"] <= distance_cutoff].reset_index(drop=True)
 
-    contact_pair_list = [i.split("-")[0] for i in Pairs["ATOM_PAIR"]]
-    Pairs["PROT_ATOM"] = contact_pair_list
-    Pairs["LIG_ATOM"] = [int(i.split("-")[1]) for i in Pairs["ATOM_PAIR"]]
+    contact_pair_list = [i.split("-")[0] for i in pairs["ATOM_PAIR"]]
+    pairs["PROT_ATOM"] = contact_pair_list
+    pairs["LIG_ATOM"] = [int(i.split("-")[1]) for i in pairs["ATOM_PAIR"]]
 
-    return Pairs
+    return pairs
 
 
 def atom_features(
@@ -222,6 +247,10 @@ def atom_features(
         "is_in_ring",
     ],
 ):
+    """
+    This function computes ligand atom features (number of heavy atoms, nomber of hydrogen atom neighbors,
+    explicit valence of the atom, aromticity, atom in a ring) to generate node graph
+    """
 
     feature_list = []
     if "num_heavy_atoms" in features:
@@ -248,14 +277,19 @@ def atom_features(
     return np.array(feature_list)
 
 
-# Generates the protein-ligand interaction features for the PLIG creation
-def atom_features_PLIG(atom_idx, atom, contact_df, extra_features, Atom_Keys):
+def atom_features_plig(
+    atom_idx: str,
+    atom: str,
+    contact_df: pd.DataFrame,
+    extra_features: str,
+    atom_keys: Dict[Any, Any],
+) -> npt.NDArray[Any]:
 
-    possible_contacts = list(dict.fromkeys(Atom_Keys["ATOM_TYPE"]))
+    """This function generates the protein-ligand interaction features"""
+    possible_contacts = list(dict.fromkeys(atom_keys["ATOM_TYPE"]))
     feature_list = np.zeros(len(possible_contacts), dtype=int)
     contact_df_slice = contact_df[contact_df["LIG_ATOM"] == atom_idx]
 
-    # count the number of contacts between ligand and protein atoms
     for i, contact in enumerate(possible_contacts):
         for k in contact_df_slice["PROT_ATOM"]:
             if k == contact:
@@ -270,7 +304,7 @@ def atom_features_PLIG(atom_idx, atom, contact_df, extra_features, Atom_Keys):
 def mol_to_graph(
     mol,
     contact_df,
-    Atom_Keys,
+    atom_keys,
     extra_features=[
         "num_heavy_atoms",
         "total_num_Hs",
@@ -279,7 +313,9 @@ def mol_to_graph(
         "is_in_ring",
     ],
 ):
-
+    """
+    This function returns molecular graph with its node features and edge indices
+    """
     c_size = len([x.GetSymbol() for x in mol.GetAtoms() if x.GetSymbol() != "H"])
     features = []
     heavy_atom_index = []
@@ -292,8 +328,8 @@ def mol_to_graph(
             idx_to_idx[atom.GetIdx()] = counter
             counter += 1
             heavy_atom_index.append(atom.GetIdx())
-            feature = atom_features_PLIG(
-                atom.GetIdx(), atom, contact_df, extra_features, Atom_Keys
+            feature = atom_features_plig(
+                atom.GetIdx(), atom, contact_df, extra_features, atom_keys
             )
             features.append(feature)
 
@@ -311,13 +347,18 @@ def mol_to_graph(
     for e1, e2 in g.edges:
         edge_index.append([e1, e2])
 
-    # return molecular graph with its node features and edge indices
+    #
     return c_size, features, edge_index
 
 
-# Save structure in PDB and mol2 format
-def save_structure(fname):
-    global pdb_raw_d
+def save_structure(fname: str):
+    """This function generated multiple subdirestories for each protein-ligand system .
+
+    Every subdirectory is named after its protein-ligand complex and it contains the input files required to generated the molecular graph:
+    1) Protein_ligand complex in pdb format
+    2) Ligand in pdb format
+    3) Ligand pdb structures are converted and saved as mol2 format."""
+
     pdb_prot_downloaded = []
     with open(fname, "r") as f:
         lines = f.readlines()[1:]
@@ -337,7 +378,7 @@ def save_structure(fname):
                     x = get_pdb_components(pdb_prot)
                     pdb_prot_downloaded += [pdb_prot]
 
-                prot, lig = parsePDB(pdb_lig, pdb_raw_d + "/" + pdb_prot + ".pdb")
+                prot, lig = parse_pdb(pdb_lig, pdb_raw_d + "/" + pdb_prot + ".pdb")
 
                 if not os.path.exists("../data/PDB/data/" + pdb_prot + "_" + pdb_lig):
                     os.makedirs("../data/PDB/data/" + pdb_prot + "_" + pdb_lig)
@@ -400,5 +441,4 @@ def save_structure(fname):
                                     + pdb_lig
                                     + "/"
                                     + f"{pdb_lig}.mol2",
-                                )  # else:
-                    # print("The write is skipped")
+                                )

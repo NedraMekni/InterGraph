@@ -7,10 +7,9 @@ from html.parser import HTMLParser
 from requests.utils import requote_uri
 from tqdm import tqdm
 from chembl_webresource_client.new_client import new_client
-
 from InterGraph.target_req import chembl_comp_to_pdb
 
-### collect_raw_data.py ###
+
 target = new_client.target
 activity = new_client.activity
 chembl_pdb_target_dict = {}
@@ -18,8 +17,8 @@ chembl_pdb_lig_dict = {}
 pdb_target_lig_dict = {}
 
 
-def retrieve_pdb_data(compounds):
-
+def retrieve_pdb_data(compounds: str):
+    """Given the ligand ChEBML id, this function writes a csv file adding the ligand PDBid to the information stored in data_from_chembl.csv"""
     f = open("raw_data.csv", "w")
     f.write(
         "target_chembl_id, target_uniprot_id, pref_name, canonical_smiles, IC50 uM, molecule_chembl_id, assay_chembl_id, pdb_comp_id\n"
@@ -38,10 +37,8 @@ def retrieve_pdb_data(compounds):
     f.close()
 
 
-### clear_raw_data.py ###
-
-
 def clear_raw_data(filename):
+    """This function cleans the raw_data.csv file from compounds whose activity values are not published"""
     with open("cleaned_raw_data.csv", "w") as f:
         with open("raw_data.csv", "r") as g:
             c = 0
@@ -69,17 +66,15 @@ def clear_raw_data(filename):
     # print("lenght file : ", c1)
 
 
-### get_pdb_code.py ###
-
-
-def retrieve_pdb_from_target(chemblID):
+def retrieve_pdb_from_target(chemblID: str) -> str:
+    """Performs an HTTPS request to get target uniprot identifier using the protein ChEMBL"""
     url = "https://www.uniprot.org/uploadlists/"
 
     params = {
         "from": "CHEMBL_ID",
         "to": "ACC",
         "format": "tab",
-        "query": chemblID,  # valorizziamolo noi
+        "query": chemblID,
     }
     print("call uniprot db for => {}".format(chemblID))
     data = urllib.parse.urlencode(params)
@@ -97,7 +92,9 @@ def retrieve_pdb_from_target(chemblID):
     return result.strip()
 
 
-def get_pdb_entries_with_pdb_comp(pdb_comp_id):
+def get_pdb_entries_with_pdb_comp(pdb_comp_id: str):
+    """This function uses PDB's web service to retrieve crystal structures of the ligand of interest bound to a protein"""
+
     pdb_q = {
         "query": {
             "type": "terminal",
@@ -125,7 +122,8 @@ def get_pdb_entries_with_pdb_comp(pdb_comp_id):
         ]
 
 
-def match_uniprot_from_pdbids(pdb_ids, uniprot_id):
+def match_uniprot_from_pdbids(pdb_ids, uniprot_id) -> list:
+    """Query the PDB database on Uniprot identifier"""
     pdb_str = "["
     for pdbid in pdb_ids[:-1]:
         pdb_str += f""" "{pdbid}","""
@@ -151,9 +149,6 @@ def match_uniprot_from_pdbids(pdb_ids, uniprot_id):
     link = "https://data.rcsb.org/graphql?query=" + pdb_q1
     link = "%5b".join(link.split("["))  # same as replace
     link = "%5d".join(link.split("]"))  # same as replace
-
-    # pdb_res = requests.get("https://data.rcsb.org/graphql/index.html?query=" + pdb_q1)
-    # print(link)
     try:
         pdb_res = requests.get(requote_uri(link))
 
@@ -189,10 +184,10 @@ def match_uniprot_from_pdbids(pdb_ids, uniprot_id):
                 # print(e)
 
     return struct_list
-    ### ###
 
 
 def write_clean_raw_data(filename):
+    """This function write a csv file containing all the structurale and activity data collected"""
     out = []
     with open(
         "/Users/nedramekni/Documents/PhD/Projects/NLRP3/skelrepo/InterGraph/data/csv/cleaned_raw_data.csv",

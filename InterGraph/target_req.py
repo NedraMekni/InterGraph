@@ -6,11 +6,14 @@ from chembl_webresource_client.new_client import new_client
 
 target = new_client.target
 activity = new_client.activity
-
+# Limit target variable specifies the number of targets pulled back for each url call
 LIMIT_TARGET = 1
 
 
-def chembl_comp_to_pdb(chembl_compound_id: str) -> str:
+def chembl_comp_to_pdb(chembl_compound_id: str):
+    """This function performs UniChem API query using the ligand chemblID to get PDB ligand ID.
+    The UniChem API query looks like: https://www.ebi.ac.uk/unichem/rest/src_compound_id/{chembl_compound_id}/1/3
+    wehere 1 indicates that it is a chemblID and 3 that a pdb ID output is requested"""
 
     chembl_q = (
         f"https://www.ebi.ac.uk/unichem/rest/src_compound_id/{chembl_compound_id}/1/3"
@@ -31,7 +34,8 @@ def chembl_comp_to_pdb(chembl_compound_id: str) -> str:
     return n_target
 
 
-def check_uniprot(uniprot_id):
+def check_uniprot(uniprot_id: str):
+    """This function checks if it's a valid uniprot id"""
     return (
         len(uniprot_id) == 6
         and uniprot_id[0] in string.ascii_uppercase
@@ -50,8 +54,10 @@ Create csv data_from_chembl file
 
 
 def retrieve_chembl_data():
+    """This function allows to access ChEMBL data through ChEMBL websource client.
+    target chebmlID, uniprotID, protein name,ligand smiles, activity,assay type and molecule chembl id are stored in a csv file"""
     global target, activity, LIMIT_TARGET
-    
+
     r, results = [], []
     f = open("data_from_chembl.csv", "w")
     f.write(
