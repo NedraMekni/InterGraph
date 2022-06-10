@@ -10,9 +10,7 @@ dependencies:
   - tqdm
   - numpy
   - networkx
-  - urlib
   - request
-  - pickle
   - openbabel
   - rdkit
   - scipy
