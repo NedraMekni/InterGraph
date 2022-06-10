@@ -1,11 +1,19 @@
 name: test
 channels:
-
+  - conda-forge
   - defaults
 dependencies:
     # Base depends
   - python
   - pip
+  - pandas
+  - tqdm
+  - numpy
+  - networkx
+  - request
+  - openbabel
+  - rdkit
+  - scipy
 
     # Testing
   - pytest
@@ -13,5 +21,5 @@ dependencies:
 
   # Pip-only installs
   - pip:
-    - codecov
+    - chembl_webresource_client
 
