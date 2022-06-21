@@ -2,10 +2,10 @@ import requests
 import json
 import string
 import urllib
+import tqdm
 
 from html.parser import HTMLParser
 from requests.utils import requote_uri
-from tqdm import tqdm
 from chembl_webresource_client.new_client import new_client
 from InterGraph.target_req import chembl_comp_to_pdb
 

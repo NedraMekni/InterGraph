@@ -1,4 +1,3 @@
-import os.path
 import pandas as pd
 import os
 import pickle
@@ -6,16 +5,13 @@ import urllib.request
 import pandas as pd
 import numpy as np
 import networkx as nx
-import openbabel
-import typing
 import numpy.typing as npt
+import tqdm
 
-
-from tqdm import tqdm
+from openbabel import openbabel
 from rdkit import Chem
 from scipy.spatial.distance import cdist
 from itertools import product
-from openbabel import openbabel
 from typing import Tuple, Any, Dict
 
 
