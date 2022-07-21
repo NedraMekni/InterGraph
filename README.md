@@ -5,7 +5,7 @@ InterGraph
 [![codecov](https://codecov.io/gh/NedraMekni/InterGraph/branch/master/graph/badge.svg)](https://codecov.io/gh/NedraMekni/InterGraph/branch/master)
 
 
-General design GNN pipeline using iprotein-ligand interaction graph
+General design GNN pipeline using protein-ligand interaction graph
 
 ### Copyright
 
