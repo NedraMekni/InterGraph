@@ -23,7 +23,7 @@ list_of_pdbcodes = [i for i in os.listdir(raw_data)]
 print(list_of_pdbcodes)
 
 # load in all atom types for the 20 proteinogenic amino acids
-Atom_Keys = pd.read_csv("../data/csv/PDB_Atom_Keys.csv", sep=",")
+Atom_Keys = pd.read_csv("../persistent_data/PDB_Atom_Keys.csv", sep=",")
 
 # FOR PLIG
 mol_graphs_crystal_8A = {}
