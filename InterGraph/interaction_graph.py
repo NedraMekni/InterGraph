@@ -18,16 +18,20 @@ from typing import Tuple, Any, Dict
 pdb_raw_d = "../data/pdb_raw"
 
 
-def file_path():
+def file_path(data_raw_path,pdb_raw_path,csv_path,IFG_path):
     """
     This function creates data and pdb_raw subdirectories
     pdb_raw: unsplitted pdb
     """
 
-    if not os.path.exists("../data/data"):
-        os.makedirs("../data/data")
-    if not os.path.exists("../data/pdb_raw"):
-        os.makedirs("../data/pdb_raw")
+    if not os.path.exists(data_raw_path):
+        os.makedirs(data_raw_path)
+    if not os.path.exists(pdb_raw_path):
+        os.makedirs(pdb_raw_path)
+    if not os.path.exists(csv_path):
+        os.makedirs(csv_path)
+    if not os.path.exists(IFG_path):
+        os.makedirs(IFG_path)
 
 
 def get_pdb_components(pdb_id: str):
@@ -65,7 +69,7 @@ def write_pdb(prot: str, lig: str, filename: str) -> None:
     with open(filename, "w") as f:
         for l in prot:
             f.write(l)
-            f.write("TER\n")
+        f.write("TER\n")
         for l in lig:
             f.write(l)
 
@@ -76,7 +80,7 @@ def write_ligand_pdb(lig: str, filename: str):
         for l in lig:
             l.split(",")
             f.write(l)
-            return f
+           
 
 
 def load_structures() -> dict:
@@ -119,7 +123,6 @@ def load_structures() -> dict:
 
 
 def get_atom_type(atom: str) -> str:
-    exit()
     """ This function identifies the unique protein atom types using rdkit modules"""
     AtomType = [
         atom.GetSymbol(),
@@ -343,7 +346,6 @@ def mol_to_graph(
     for e1, e2 in g.edges:
         edge_index.append([e1, e2])
 
-    #
     return c_size, features, edge_index
 
 
