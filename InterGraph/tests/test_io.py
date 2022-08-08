@@ -81,11 +81,11 @@ def test_retrieve_chembl_data():
 # Test that cleaned_raw_data.csv exists, it is not empty and has the expected number of header columns
 def test_write_clean_raw_data():
 
-    with open("../../InterGraph/data/csv/cleaned_raw_data.csv") as csv_file:
+    with open("../InterGraph/data/csv/cleaned_raw_data.csv") as csv_file:
         reader = csv.reader(csv_file)
         csv_to_list = list(reader)
     header = len(csv_to_list[0])
     assert header == 8
 
-    filesize = os.path.getsize("../../InterGraph/data/csv/cleaned_raw_data.csv")
+    filesize = os.path.getsize("../InterGraph/data/csv/cleaned_raw_data.csv")
     assert filesize != 0
