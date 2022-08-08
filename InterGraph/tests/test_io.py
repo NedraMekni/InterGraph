@@ -46,7 +46,7 @@ def test_retrieve_chembl_data():
 
     results = []
 
-    get = target.get("CHEMBL2074")
+    get = target.get("CHEMBL202")
     prot_chembl_id = get["target_chembl_id"]
     prot_uniprot_id = get["cross_references"][0]["xref_id"]
     pref_name = get["pref_name"]
@@ -54,8 +54,14 @@ def test_retrieve_chembl_data():
         standard_type="IC50"
     )
 
-    t = prot_activities
-    for t in prot_activities:
+    #t = prot_activities
+    try:
+        get_target_activity = []
+        for prot_activity in prot_activities:
+            get_target_activity.append(prot_activity)
+    except:
+        print('target skipped, activity not found')
+    for t in get_target_activity:
         results += [
             [
                 prot_chembl_id,

@@ -9,7 +9,7 @@ target = new_client.target
 activity = new_client.activity
 
 # Limit target variable specifies the number of targets pulled back for each url call
-LIMIT_TARGET = 3
+LIMIT_TARGET = 20
 
 
 def chembl_comp_to_pdb_new(chembl_compound_id: str):
@@ -62,7 +62,7 @@ def retrieve_chembl_data(fname):
         "target_chembl_id, target_uniprot_id, pref_name, canonical_smiles, IC50 uM, assay_chembl_id, molecule_chembl_id\n"
     )
 
-    count_target = 0
+    count_target = 1
 
     # t_chembl = target_api[0]['target_chembl_id']
     for prot in target.all():
@@ -81,10 +81,17 @@ def retrieve_chembl_data(fname):
             standard_type="IC50"
         )
 
+        try:
+            get_target_activity = []
+            for prot_activity in prot_activities:
+                get_target_activity.append(prot_activity)
+        except:
+            print('target skipped, activity not found')
         """
 		prot_activities is a list 
 		"""
-        for t in prot_activities:
+        for t in get_target_activity:
+
             # print('\t {} {} {}'.format(t['molecule_chembl_id'],t['canonical_smiles'],t['standard_value']))
             results += [
                 [
