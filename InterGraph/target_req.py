@@ -59,7 +59,7 @@ def retrieve_chembl_data(fname):
     r, results = [], []
     f = open(fname, "w")
     f.write(
-        "target_chembl_id, target_uniprot_id, pref_name, canonical_smiles, IC50 uM, assay_chembl_id, molecule_chembl_id\n"
+        "target_chembl_id, target_uniprot_id, pref_name, canonical_smiles, IC50 uM, assay_chembl_id, molecule_chembl_id, IC50_units\n"
     )
 
     count_target = 1
@@ -78,7 +78,8 @@ def retrieve_chembl_data(fname):
 
         print(prot_chembl_id, prot_uniprot_id, pref_name)
         prot_activities = activity.filter(target_chembl_id=prot_chembl_id).filter(
-            standard_type="IC50"
+            standard_type="IC50", 
+            standard_units="nM"
         )
 
         try:
@@ -112,7 +113,8 @@ def retrieve_chembl_data(fname):
                     t["canonical_smiles"],
                     t["standard_value"],
                     t["assay_chembl_id"],
-                    t["molecule_chembl_id"],
+                    t["molecule_chembl_id"]
+                    
                 )
             )
         count_target += 1
