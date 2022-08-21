@@ -42,9 +42,13 @@ class GCN(torch.nn.Module):
         h = h.tanh()
         out = self.classifier(h)
 
+        
+
         return out, h
 
-
+"""
+Function for training GCN model
+"""
 def train(data_loader):
     calculate_mse = torch.nn.MSELoss()
     loss = 0.0
@@ -102,7 +106,8 @@ y_dict:
 
 
 def data_activities_from_file(fname: str) -> dict:
-    label = pd.read_csv(fname, usecols=["pdb_code", "activity"])
+
+    label = pd.read_csv(fname, usecols=[" pdb_code", " activity"])
     label.to_csv(r"test_y.csv", index=False)
     all_rows = []
     y_dict = {}
@@ -113,13 +118,19 @@ def data_activities_from_file(fname: str) -> dict:
             elements = l.split(",")
             elements[0] = elements[0].strip()
             elements[1] = elements[1].strip()
-
+            
+ 
             for k in elements[0].split(" "):
                 if k not in y_dict.keys():
                     y_dict[k] = []
+                    
+                try:  
+                    elements[1] = float(elements[1])
+                    y_dict[k].append(- math.log10(elements[1]))
 
-                elements[1] = float(elements[1])
-                y_dict[k].append(elements[1])
+                except:
+                    #print("### cast error, skip activity reading")
+                    continue
 
     return y_dict
 
@@ -132,7 +143,7 @@ global_g:
 	-value: graph object, node attribute -> tuple
 """
 
-def build_graph_dict(graph_dict, y_dict):
+def build_graph_dict(graph_dict, y_dict:dict) -> dict:
     global_G = {}
     graph_x = {}
     # helper structures for one hot encoding labels and for cast dictionary graph into list
@@ -181,7 +192,7 @@ def build_graph_dict(graph_dict, y_dict):
                 node_k1, node_v1 = kv_1[0], kv_1[1]
                 node_k2, node_v2 = kv_2[0], kv_2[1]
                 if euclidean_distance(node_v1[1:], node_v2[1:]) < treshold:
-                    # since I'm building a multigraph, I hope there is a way to put a property on same edges
+                    
                     my_edges.append(
                         (node_list_order.index(node_k1), node_list_order.index(node_k2))
                     )  # ,{'treshold':treshold}))
@@ -203,7 +214,7 @@ def build_graph_dict(graph_dict, y_dict):
         graph_x[fname] = nodes_p_final
         labels = {}
 
-        # build hot-encoding for each node in G. Not included yet in the graph
+        # build hot-encoding for each node in G. 
         for i, node in enumerate(nodes_p_final):
             label_node = [0] if nodes_p[node] == "ATOM" else [1]
             atom_type_node = [0] * len(atom_type_list)  # inizialise vector all 0
@@ -227,24 +238,35 @@ def build_graph_dict(graph_dict, y_dict):
     return global_G
 
 
+def visualize_embedding(h, color, epoch=None, loss=None):
+    plt.figure()
+    plt.xticks([])
+    plt.yticks([])
+    h = h.detach().cpu().numpy()
+    if epoch is not None and loss is not None:
+            plt.xlabel(f"Epoch: {epoch}, LossL {loss:.4fr}")
+    plt.show()
+
+
 """
 Compute euclidian distance between pair of coordinates
 """
 
 
-def euclidean_distance(p, q: float, float) -> float:
+def euclidean_distance(p, q: float) -> float:
     return math.sqrt(((p[0] - q[0]) ** 2) + ((p[1] - q[1]) ** 2) + ((p[2] - q[2]) ** 2))
-
 
 if __name__ == "__main__":
 
     graph_dict = graph_from_file(
         "/home/nmekni/Documents/NLRP3/InterGraph/data/PDB/data"
+    
     )
 
-    csv = "/home/nmekni/Documents/NLRP3/InterGraph/data/csv/data.csv"
+    csv_file= "/home/nmekni/Documents/NLRP3/InterGraph/data/csv/data.csv"
+   
 
-    y_dict = data_activities_from_file(csv)
+    y_dict = data_activities_from_file(csv_file)
 
     global_G = build_graph_dict(graph_dict, y_dict)
 
@@ -260,11 +282,21 @@ if __name__ == "__main__":
         graph_y.append(pytg_graph_dict[k].y)
 
     loader = DataLoader(graph_list, batch_size=1)
-
+    #print("GLOBAL G: ",(dir(global_G)))
+    
     model = GCN(1)
-    criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)  # Define optimizer.
+    #print("MODEL: ",(dir(model)))
+      
+    #_,h = model(G.x, G.edge_index)
+    #print(f"embedding shape{list(h.shape)}")
 
+    #visualize_embedding(h, color = pytg_graph_dict.y)
+    
+
+
+    criterion = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)  # Define optimizer.
+    
     loss_values = []
 
     for epoch in range(401):
@@ -272,7 +304,7 @@ if __name__ == "__main__":
         loss_values.append(loss)
         if epoch % 100 == 0:
             print(f"Epoch: {epoch:03d}, loss: {loss:.4f}")
-
+            #visualize_embedding(h, color=graph_y, epoch=epoch,loss=loss)
     print(loss_values)
     plt.plot(loss_values, label="loss value")
     plt.ylabel("Loss")
