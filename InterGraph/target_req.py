@@ -7,9 +7,10 @@ from chembl_webresource_client.new_client import new_client
 
 target = new_client.target
 activity = new_client.activity
+assay = new_client.assay
 
 # Limit target variable specifies the number of targets pulled back for each url call
-LIMIT_TARGET = 20
+LIMIT_TARGET = 40
 
 
 def chembl_comp_to_pdb_new(chembl_compound_id: str):
@@ -79,13 +80,34 @@ def retrieve_chembl_data(fname):
         print(prot_chembl_id, prot_uniprot_id, pref_name)
         prot_activities = activity.filter(target_chembl_id=prot_chembl_id).filter(
             standard_type="IC50", 
-            standard_units="nM"
+            standard_units="nM",
+            assay_type  = 'B'
         )
 
+        #assay_filter = assay.filter(target_chembl_id=prot_chembl_id).filter(confidence_score=9)
+        #print(len(assay_filter))
         try:
             get_target_activity = []
             for prot_activity in prot_activities:
-                get_target_activity.append(prot_activity)
+                if "assay_chembl_id" in prot_activity.keys():
+                    assay_filter = assay.filter(assay_chembl_id=prot_activity["assay_chembl_id"])
+                    if len(assay_filter)==1 and "confidence_score" in assay_filter[0].keys():
+                        assay_filter = assay_filter[0]
+    
+                        try:
+                            confidence_score = float(assay_filter["confidence_score"])
+                            if confidence_score >= 4.0:
+                                print(prot_chembl_id,confidence_score)
+                                get_target_activity.append(prot_activity)
+                        except ValueError:
+                            print("activity error cast ")
+                            continue
+                    else:
+                        print("len(assay_filter) = {} or Confidence score not found".format(len(assay_filter)))
+                else:
+                    print("key error")
+                    print(prot_activity.keys())
+
         except:
             print('target skipped, activity not found')
         """
@@ -117,11 +139,11 @@ def retrieve_chembl_data(fname):
                     
                 )
             )
-        count_target += 1
+        
         if count_target == LIMIT_TARGET:
 
             break
-
+        count_target += 1
     print("FILE CREATED")
     f.close()
     return results

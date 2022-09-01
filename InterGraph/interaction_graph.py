@@ -47,6 +47,7 @@ def get_pdb_components(pdb_id: str):
 
 def parse_pdb(lig: str, filename: str) -> Tuple[list, list]:
     """This function splits proten-ligand file into ligand and protein for each PDB in /data/pdb_raw"""
+
     prot = []
     ligs = []
 
@@ -54,10 +55,11 @@ def parse_pdb(lig: str, filename: str) -> Tuple[list, list]:
         for l in f:
             if l.split()[0] == "ATOM":
                 prot += [l]
-            if len(l.split()) > 3 and l.split()[3] == lig:
+            if l.split()[0] == "HETATM" and len(l.split()) > 3 and l.split()[3] == lig:
                 ligs += [l]
 
     return prot, ligs
+
 
 
 def write_pdb(prot: str, lig: str, filename: str) -> None:

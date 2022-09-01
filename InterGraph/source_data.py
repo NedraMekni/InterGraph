@@ -378,7 +378,8 @@ def write_clean_raw_data(inputfile, outputfile):
                 chembl_pdb_lig_dict[pdb_lig] = l_r
 
             # l_r = get_pdb_entries_with_pdb_comp(pdb_lig)
-            if l_r:
+            
+            if chembl_pdb_lig_dict[pdb_lig]:
                 if (
                     chembl_pdb_target_dict[target]
                     + " ".join(chembl_pdb_lig_dict[pdb_lig])
