@@ -4,15 +4,18 @@ import itertools
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import scipy.stats as stats
 import torch
 import csv
 import torch.nn as nn
 import MDAnalysis as mda
 import matplotlib.pyplot as olt
+import torch_geometric
+from torch_geometric.nn import global_mean_pool
+
 
 from torch.nn import Linear
 from torch_geometric.nn import GCNConv
-from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
@@ -31,15 +34,17 @@ class GCN(torch.nn.Module):
         self.conv1 = GCNConv(num_features, 4)
         self.conv2 = GCNConv(4, 4)
         self.conv3 = GCNConv(4, 2)
+
         self.classifier = Linear(2, 1)
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index,batch):
         h = self.conv1(x, edge_index)
         h = h.tanh()
         h = self.conv2(h, edge_index)
         h = h.tanh()
         h = self.conv3(h, edge_index)
         h = h.tanh()
+        h = global_mean_pool(h,batch)
         out = self.classifier(h)
 
         
@@ -49,18 +54,22 @@ class GCN(torch.nn.Module):
 """
 Function for training GCN model
 """
+model = GCN(1)
+calculate_mse  = torch.nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)  # Define optimizer.
+
 def train(data_loader):
-    calculate_mse = torch.nn.MSELoss()
+    model.train()
+    #calculate_mse = torch.nn.MSELoss()
     loss = 0.0
     for data in data_loader:
-        optimizer.zero_grad()  # Clear gradients.
-        ref = data.y
-        out, h = model(data.x, data.edge_index)  # Perform a single forward pass.
-        loss_for_batch = calculate_mse(out.flatten(), ref)  # Compute the loss.
+        ref = data.y      
+        out, h = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
+        loss_for_batch = calculate_mse(out, ref)  # Compute the loss.
         loss_for_batch.backward()  # Derive gradients.
         optimizer.step()  # Update parameters based on gradients.
+        optimizer.zero_grad()  # Clear gradients.
         loss += loss_for_batch.detach().item()
-
     return loss, h
 
 
@@ -70,8 +79,20 @@ graph dict:
 	-key: PDB file name -> str 
 	-value: graph -> tuple of dicts
 """
+def valid_pdb(dirname: str) -> None:
+    my_files = list(os.walk(dirname))[0]
+
+    for z in my_files[2]:
+        if "_H.pdb" not in z:
+            continue
+        with open(dirname + "/" + z, "r") as f:
+            lines = f.readlines()
+            if (not any([row.split()[0]=='ATOM' for row in lines if len(row.split())>0])) or (not any([row.split()[0]=='HETATM' for row in lines if len(row.split())>0])):
+                print('removing file {}'.format(z))
+                os.remove(dirname + "/" + z)
 
 
+        
 def graph_from_file(dirname: str) -> dict:
     graph_dict = {}
     my_files = list(os.walk(dirname))[0]
@@ -81,17 +102,35 @@ def graph_from_file(dirname: str) -> dict:
         nodes_p = {}
         if "_H.pdb" not in z:
             continue
-
+        is_valid = True
         with open(dirname + "/" + z, "r") as f:
-
+            print('building ',z)
             for l in f:
-                l = l.split()
+                try:
+                    l = l.split()
 
-                if l[0] == "ATOM" or l[0] == "HETATM":
-                    nodes_p[int(l[1])] = (l[2], float(l[6]), float(l[7]), float(l[8]))
-                    nodes_p_entry[int(l[1])] = l[0]
-
-        u = mda.Universe(dirname + "/" + z)
+                    if l[0] == "ATOM" or l[0] == "HETATM":
+                        #print(f,l)
+                    
+                        nodes_p[int(l[1])] = (l[2], float(l[6]), float(l[7]), float(l[8]))
+                    
+                    
+                    
+                        nodes_p_entry[int(l[1])] = l[0]
+                except ValueError:
+                    is_valid = False
+                if not is_valid :
+                    break
+                
+        if not is_valid:
+            continue
+        try:
+            u = mda.Universe(dirname + "/" + z)
+            if not hasattr(u,"atoms") or not all ([hasattr(atom,"bonds") for atom in u.atoms]):
+                continue
+        except:
+            continue
+        
         graph_dict[z] = (nodes_p, nodes_p_entry, u.atoms)
 
     return graph_dict
@@ -125,14 +164,20 @@ def data_activities_from_file(fname: str) -> dict:
                     y_dict[k] = []
                     
                 try:  
-                    elements[1] = float(elements[1])
-                    y_dict[k].append(- math.log10(elements[1]))
+                    v = float(elements[1])
+                    v = - math.log10(v)
+                    y_dict[k].append(v)
+
 
                 except:
                     #print("### cast error, skip activity reading")
                     continue
 
     return y_dict
+
+
+def filter_with_y(graph_dict,y_dict):
+    return {k:graph_dict[k] for k in graph_dict.keys() if k.split("_")[0]+"_1" in y_dict.keys()}
 
 
 """
@@ -146,6 +191,13 @@ global_g:
 def build_graph_dict(graph_dict, y_dict:dict) -> dict:
     global_G = {}
     graph_x = {}
+    # ENABLE Z NORM
+    #y_list = np.array([y_dict[k][0] for k in y_dict.keys()])
+    
+    #y_list = stats.zscore(y_list)
+   
+    #y_norm_dict = {list(y_dict.keys())[i]: y_list[i] for i in range(len(y_list))}
+ 
     # helper structures for one hot encoding labels and for cast dictionary graph into list
     atom_type_list = [
         [graph_dict[k][0][k1][0] for k1 in graph_dict[k][0].keys()]
@@ -159,7 +211,9 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
     }
 
     print("building adjacence list for each graph")
+    graph_dict = {k: graph_dict[k] for k in graph_dict.keys() if k.split("_")[0] + "_1" in y_dict.keys()}
     for fname in graph_dict.keys():
+        print("building adjacence list of ",fname)
         my_edges = []
         # node_p and node_p_etry are two dictionaries storing nodes
 
@@ -179,37 +233,60 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
             assert n_hydro < 5
             n_hydro_hot[n_hydro] = 1
             hydrogen_label.append(n_hydro_hot)
-            # print('element {}\n bond list {}\n n hydro {}'.format(atom.element,[bond[1].element for bond in neighbour_atoms if bond[1].element =='H'], n_hydro) )
 
         # Multigraph generation
         # add edges in a edge list based on distance threshold. We add edge if the distance between two nodes, is < threshold
+        print('end atom loop ',fname)
+        print('number of atoms: ',len(nodes_p.items()))
 
-        for treshold in [3.0, 6.0, 9.0]:
+        for kv_1, kv_2 in itertools.combinations(
+            nodes_p.items(), 2
+        ):  # we consider all possible nodes pair (kv_1,kv_2)
+            node_k1, node_v1 = kv_1[0], kv_1[1]
+            node_k2, node_v2 = kv_2[0], kv_2[1]
+            if euclidean_distance(node_v1[1:], node_v2[1:]) < 9.0:
+                my_edges.append(
+                    (node_list_order.index(node_k1), node_list_order.index(node_k2))
+                )  # ,{'treshold':9.0}))
+                my_edges.append(
+                    (node_list_order.index(node_k2), node_list_order.index(node_k1))
+                )  # ,{'treshold':9.0}))
 
-            for kv_1, kv_2 in itertools.combinations(
-                nodes_p.items(), 2
-            ):  # we consider all possible nodes pair (kv_1,kv_2)
-                node_k1, node_v1 = kv_1[0], kv_1[1]
-                node_k2, node_v2 = kv_2[0], kv_2[1]
-                if euclidean_distance(node_v1[1:], node_v2[1:]) < treshold:
-                    
+                if euclidean_distance(node_v1[1:], node_v2[1:]) < 6.0:
                     my_edges.append(
                         (node_list_order.index(node_k1), node_list_order.index(node_k2))
-                    )  # ,{'treshold':treshold}))
+                    )  # ,{'treshold':6.0}))
                     my_edges.append(
                         (node_list_order.index(node_k2), node_list_order.index(node_k1))
-                    )  # ,{'treshold':treshold}))
+                    )  # ,{'treshold':6.0}))
 
+                    if euclidean_distance(node_v1[1:], node_v2[1:]) < 3.0:
+                        my_edges.append(
+                            (node_list_order.index(node_k1), node_list_order.index(node_k2))
+                        )  # ,{'treshold':3.0}))
+                        my_edges.append(
+                            (node_list_order.index(node_k2), node_list_order.index(node_k1))
+                        )  # ,{'treshold':3.0}))
+
+        print('end treshold loop ',fname)
         # build pytorch data graph
         nodes_p_final = list(nodes_p.keys())
         nodes_p_tensor = [[x] for x in list(nodes_p.keys())]
         graph_data_x = torch.tensor(nodes_p_tensor, dtype=torch.float)
         graph_edge = torch.tensor(my_edges, dtype=torch.long)
+        print(y_dict[fname.split("_")[0] + "_1"])
+        y_tensor = torch.tensor([[y_dict[fname.split("_")[0] + "_1"][0]]],dtype = torch.float)
+        #y_tensor = torch.tensor([[y_norm_dict[fname.split("_")[0] + "_1"]]], dtype = torch.float)
+       
+        
+        print("y tensor", y_tensor)
+
+        print("data.x size: ", graph_data_x.size())
         G = Data(
             x=graph_data_x,
             edge_index=graph_edge.t().contiguous(),
-            y=torch.tensor([y_dict[fname.split("_")[0] + "_1"][0]]),
-            dtype=torch.float,
+            y=y_tensor,
+            #dtype=torch.float,
         )
         graph_x[fname] = nodes_p_final
         labels = {}
@@ -238,15 +315,6 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
     return global_G
 
 
-def visualize_embedding(h, color, epoch=None, loss=None):
-    plt.figure()
-    plt.xticks([])
-    plt.yticks([])
-    h = h.detach().cpu().numpy()
-    if epoch is not None and loss is not None:
-            plt.xlabel(f"Epoch: {epoch}, LossL {loss:.4fr}")
-    plt.show()
-
 
 """
 Compute euclidian distance between pair of coordinates
@@ -257,16 +325,16 @@ def euclidean_distance(p, q: float) -> float:
     return math.sqrt(((p[0] - q[0]) ** 2) + ((p[1] - q[1]) ** 2) + ((p[2] - q[2]) ** 2))
 
 if __name__ == "__main__":
-
+    valid_pdb("/home/nmekni/Documents/NLRP3/InterGraph/data/PDB/data_test/")
     graph_dict = graph_from_file(
-        "/home/nmekni/Documents/NLRP3/InterGraph/data/PDB/data"
+        "/home/nmekni/Documents/NLRP3/InterGraph/data/PDB/data_test/"
     
     )
 
-    csv_file= "/home/nmekni/Documents/NLRP3/InterGraph/data/csv/data.csv"
-   
+    csv_file  = "/home/nmekni/Documents/NLRP3/InterGraph/scripts/y_preprocessed.csv"
 
     y_dict = data_activities_from_file(csv_file)
+    graph_dict = filter_with_y(graph_dict,y_dict)
 
     global_G = build_graph_dict(graph_dict, y_dict)
 
@@ -276,38 +344,23 @@ if __name__ == "__main__":
     graph_y = []
 
     for k in pytg_graph_dict.keys():
-        pytg_graph_dict[k].label = 0
-        pytg_graph_dict[k]["label"] = global_G[k][1]
         graph_list.append(pytg_graph_dict[k])
         graph_y.append(pytg_graph_dict[k].y)
-
-    loader = DataLoader(graph_list, batch_size=1)
-    #print("GLOBAL G: ",(dir(global_G)))
-    
-    model = GCN(1)
-    #print("MODEL: ",(dir(model)))
-      
-    #_,h = model(G.x, G.edge_index)
-    #print(f"embedding shape{list(h.shape)}")
-
-    #visualize_embedding(h, color = pytg_graph_dict.y)
-    
-
-
-    criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)  # Define optimizer.
+        
+    loader = DataLoader(graph_list, batch_size=2)
+    print("end data loader")
     
     loss_values = []
 
-    for epoch in range(401):
+    for epoch in range(1001):
         loss, h = train(loader)
         loss_values.append(loss)
         if epoch % 100 == 0:
             print(f"Epoch: {epoch:03d}, loss: {loss:.4f}")
-            #visualize_embedding(h, color=graph_y, epoch=epoch,loss=loss)
     print(loss_values)
     plt.plot(loss_values, label="loss value")
     plt.ylabel("Loss")
     plt.xlabel("Epoch")
     plt.legend()
-    plt.show()
+    plt.savefig("loss_35_10_2_sept_epoch_1000_LR_0_001_target.png")
+    #plt.show()
