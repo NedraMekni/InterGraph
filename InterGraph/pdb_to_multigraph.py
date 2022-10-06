@@ -9,8 +9,8 @@ import torch
 import csv
 import torch.nn as nn
 import MDAnalysis as mda
-import matplotlib.pyplot as olt
-import torch_geometric
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool
 
 
@@ -21,6 +21,8 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 from functools import reduce
 
+device = torch.device("cuda:0") if torch.cuda.is_available() else "cpu"
+
 """
 GCN extends torch.nn.module adding some properties and defying forward method
 """
@@ -30,12 +32,15 @@ class GCN(torch.nn.Module):
     def __init__(self, num_features):
         super().__init__()
         torch.manual_seed(1234)
+        self.conv1 = GCNConv(num_features, 16)
+        self.conv2 = GCNConv(16, 128)
+        self.conv3 = GCNConv(128, 128)
+        self.conv4 = GCNConv(128, 64) 
+        self.conv5 = GCNConv(64, 64)# NOTE: a 4th conv layer!
+        self.classifier = Linear(64, 1)
+        #self.linear1 = torch.nn.Linear(2, 1)
 
-        self.conv1 = GCNConv(num_features, 4)
-        self.conv2 = GCNConv(4, 4)
-        self.conv3 = GCNConv(4, 2)
-
-        self.classifier = Linear(2, 1)
+       
 
     def forward(self, x, edge_index,batch):
         h = self.conv1(x, edge_index)
@@ -44,33 +49,37 @@ class GCN(torch.nn.Module):
         h = h.tanh()
         h = self.conv3(h, edge_index)
         h = h.tanh()
+        h = self.conv4(h, edge_index)
+        h = h.tanh()
+        h = self.conv5(h, edge_index)
+        h = h.tanh()
         h = global_mean_pool(h,batch)
         out = self.classifier(h)
-
         
-
-        return out, h
+        return out#, h
 
 """
 Function for training GCN model
 """
 model = GCN(1)
+model.to(device)
 calculate_mse  = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)  # Define optimizer.
+optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)  # Define optimizer.
 
 def train(data_loader):
     model.train()
     #calculate_mse = torch.nn.MSELoss()
     loss = 0.0
     for data in data_loader:
-        ref = data.y      
-        out, h = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
+        ref = data.y 
+        optimizer.zero_grad()     
+        out = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
         loss_for_batch = calculate_mse(out, ref)  # Compute the loss.
         loss_for_batch.backward()  # Derive gradients.
         optimizer.step()  # Update parameters based on gradients.
-        optimizer.zero_grad()  # Clear gradients.
-        loss += loss_for_batch.detach().item()
-    return loss, h
+        #optimizer.zero_grad()  # Clear gradients.
+        loss += float(loss_for_batch.detach().item())
+    return loss#, h
 
 
 """
@@ -236,8 +245,8 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
 
         # Multigraph generation
         # add edges in a edge list based on distance threshold. We add edge if the distance between two nodes, is < threshold
-        print('end atom loop ',fname)
-        print('number of atoms: ',len(nodes_p.items()))
+        #print('end atom loop ',fname)
+        #print('number of atoms: ',len(nodes_p.items()))
 
         for kv_1, kv_2 in itertools.combinations(
             nodes_p.items(), 2
@@ -251,7 +260,7 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
                 my_edges.append(
                     (node_list_order.index(node_k2), node_list_order.index(node_k1))
                 )  # ,{'treshold':9.0}))
-
+                
                 if euclidean_distance(node_v1[1:], node_v2[1:]) < 6.0:
                     my_edges.append(
                         (node_list_order.index(node_k1), node_list_order.index(node_k2))
@@ -267,26 +276,26 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
                         my_edges.append(
                             (node_list_order.index(node_k2), node_list_order.index(node_k1))
                         )  # ,{'treshold':3.0}))
-
+                
         print('end treshold loop ',fname)
         # build pytorch data graph
         nodes_p_final = list(nodes_p.keys())
         nodes_p_tensor = [[x] for x in list(nodes_p.keys())]
-        graph_data_x = torch.tensor(nodes_p_tensor, dtype=torch.float)
-        graph_edge = torch.tensor(my_edges, dtype=torch.long)
-        print(y_dict[fname.split("_")[0] + "_1"])
-        y_tensor = torch.tensor([[y_dict[fname.split("_")[0] + "_1"][0]]],dtype = torch.float)
+        graph_data_x = torch.tensor(nodes_p_tensor, dtype=torch.float,device = device)
+        graph_edge = torch.tensor(my_edges, dtype=torch.long,device = device)
+       #print(y_dict[fname.split("_")[0] + "_1"])
+        y_tensor = torch.tensor([[y_dict[fname.split("_")[0] + "_1"][0]]], dtype = torch.float,device = device)
         #y_tensor = torch.tensor([[y_norm_dict[fname.split("_")[0] + "_1"]]], dtype = torch.float)
        
         
-        print("y tensor", y_tensor)
+        #print("y tensor", y_tensor)
 
-        print("data.x size: ", graph_data_x.size())
+        #print("data.x size: ", graph_data_x.size())
         G = Data(
             x=graph_data_x,
             edge_index=graph_edge.t().contiguous(),
             y=y_tensor,
-            #dtype=torch.float,
+            dtype=torch.float,
         )
         graph_x[fname] = nodes_p_final
         labels = {}
@@ -312,7 +321,10 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
         global_G[fname] = (G, labels)
         print("{} ohe completed".format(fname))
 
+
     return global_G
+    
+
 
 
 
@@ -335,9 +347,10 @@ if __name__ == "__main__":
 
     y_dict = data_activities_from_file(csv_file)
     graph_dict = filter_with_y(graph_dict,y_dict)
-
+    graph_dict = {k:graph_dict[k] for k in list(graph_dict.keys())[:200]}
     global_G = build_graph_dict(graph_dict, y_dict)
-
+    #torch.save(global_G,'tensorG.pt')
+    
     pytg_graph_dict = {k: global_G[k][0] for k in global_G.keys()}
 
     graph_list = []
@@ -347,20 +360,22 @@ if __name__ == "__main__":
         graph_list.append(pytg_graph_dict[k])
         graph_y.append(pytg_graph_dict[k].y)
         
-    loader = DataLoader(graph_list, batch_size=2)
+    loader = DataLoader(graph_list, batch_size=1)
     print("end data loader")
-    
+    torch.cuda.empty_cache()
     loss_values = []
 
-    for epoch in range(1001):
-        loss, h = train(loader)
+    for epoch in range(401):
+        loss = train(loader)
         loss_values.append(loss)
-        if epoch % 100 == 0:
+        if epoch % 50 == 0:
+            with open("result.txt", 'a') as out:
+                out.write(f"Epoch: {epoch:03d}, loss: {loss:.4f} \n")
             print(f"Epoch: {epoch:03d}, loss: {loss:.4f}")
     print(loss_values)
     plt.plot(loss_values, label="loss value")
     plt.ylabel("Loss")
     plt.xlabel("Epoch")
     plt.legend()
-    plt.savefig("loss_35_10_2_sept_epoch_1000_LR_0_001_target.png")
+    plt.savefig("loss_target.png")
     #plt.show()
