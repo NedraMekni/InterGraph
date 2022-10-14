@@ -65,7 +65,7 @@ model = GCN(1)
 model.to(device)
 calculate_mse  = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)  # Define optimizer.
-
+'''
 def train(data_loader):
     model.train()
     #calculate_mse = torch.nn.MSELoss()
@@ -80,7 +80,22 @@ def train(data_loader):
         #optimizer.zero_grad()  # Clear gradients.
         loss += float(loss_for_batch.detach().item())
     return loss#, h
-
+'''
+def train(data_loader):
+    model.train()
+    #calculate_mse = torch.nn.MSELoss()
+    loss = 0.0
+    for idx, data in enumerate(data_loader):
+        ref = data.y 
+        optimizer.zero_grad()  
+        print(idx)   
+        out = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
+        loss_for_batch = calculate_mse(out, ref)  # Compute the loss. (LINE 77)
+        loss_for_batch.backward()  # Derive gradients. 
+        optimizer.step()  # Update parameters based on gradients.
+        optimizer.zero_grad()  # Clear gradients.
+        loss += float(loss_for_batch.detach().item())
+    return loss#, h
 
 """
 Generate graph dict from PDB files
@@ -105,7 +120,7 @@ def valid_pdb(dirname: str) -> None:
 def graph_from_file(dirname: str) -> dict:
     graph_dict = {}
     my_files = list(os.walk(dirname))[0]
-
+    cntPdb = 0
     for z in my_files[2]:
         nodes_p_entry = {}
         nodes_p = {}
@@ -113,6 +128,7 @@ def graph_from_file(dirname: str) -> dict:
             continue
         is_valid = True
         with open(dirname + "/" + z, "r") as f:
+            cntPdb+=1
             print('building ',z)
             for l in f:
                 try:
@@ -142,6 +158,7 @@ def graph_from_file(dirname: str) -> dict:
         
         graph_dict[z] = (nodes_p, nodes_p_entry, u.atoms)
 
+    print('Tot pdb = {}'.format(cntPdb))
     return graph_dict
 
 
@@ -253,7 +270,7 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
         ):  # we consider all possible nodes pair (kv_1,kv_2)
             node_k1, node_v1 = kv_1[0], kv_1[1]
             node_k2, node_v2 = kv_2[0], kv_2[1]
-            if euclidean_distance(node_v1[1:], node_v2[1:]) < 9.0:
+            if euclidean_distance(node_v1[1:], node_v2[1:]) < 3.0:
                 my_edges.append(
                     (node_list_order.index(node_k1), node_list_order.index(node_k2))
                 )  # ,{'treshold':9.0}))
@@ -343,39 +360,16 @@ if __name__ == "__main__":
     
     )
 
+    exit()
     csv_file  = "/home/nmekni/Documents/NLRP3/InterGraph/scripts/y_preprocessed.csv"
 
     y_dict = data_activities_from_file(csv_file)
     graph_dict = filter_with_y(graph_dict,y_dict)
-    graph_dict = {k:graph_dict[k] for k in list(graph_dict.keys())[:200]}
+    graph_dict = {k:graph_dict[k] for k in list(graph_dict.keys())[:2000]}
     global_G = build_graph_dict(graph_dict, y_dict)
-    #torch.save(global_G,'tensorG.pt')
+    torch.save(global_G,'tensorG_2000_test2.pt')
+    print(len(global_G.keys()))
     
-    pytg_graph_dict = {k: global_G[k][0] for k in global_G.keys()}
-
-    graph_list = []
-    graph_y = []
-
-    for k in pytg_graph_dict.keys():
-        graph_list.append(pytg_graph_dict[k])
-        graph_y.append(pytg_graph_dict[k].y)
-        
-    loader = DataLoader(graph_list, batch_size=1)
-    print("end data loader")
-    torch.cuda.empty_cache()
-    loss_values = []
-
-    for epoch in range(401):
-        loss = train(loader)
-        loss_values.append(loss)
-        if epoch % 50 == 0:
-            with open("result.txt", 'a') as out:
-                out.write(f"Epoch: {epoch:03d}, loss: {loss:.4f} \n")
-            print(f"Epoch: {epoch:03d}, loss: {loss:.4f}")
-    print(loss_values)
-    plt.plot(loss_values, label="loss value")
-    plt.ylabel("Loss")
-    plt.xlabel("Epoch")
-    plt.legend()
-    plt.savefig("loss_target.png")
-    #plt.show()
+    
+    
+    
