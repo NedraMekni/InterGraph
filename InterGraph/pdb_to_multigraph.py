@@ -1,5 +1,6 @@
 import math
 import os
+import psutil
 import itertools
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -12,7 +13,7 @@ import MDAnalysis as mda
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool
-
+from Bio.PDB import *
 
 from torch.nn import Linear
 from torch_geometric.nn import GCNConv
@@ -21,8 +22,9 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 from functools import reduce
 
-device = torch.device("cuda:0") if torch.cuda.is_available() else "cpu"
-
+parser = PDBParser()
+device = "cpu" #torch.device("cuda:0") if torch.cuda.is_available() else "cpu"
+proc = psutil.Process() # psutils clean mda open files
 """
 GCN extends torch.nn.module adding some properties and defying forward method
 """
@@ -116,7 +118,49 @@ def valid_pdb(dirname: str) -> None:
                 os.remove(dirname + "/" + z)
 
 
+def clean_fd_mda(fname):
+    f_to_close = [f for f in proc.open_files() if f.path==fname]
+    assert len(f_to_close)==1
+    f_to_close = f_to_close[0]
+    os.close(f_to_close.fd)
+
+
+def biograph_from_file(dirname: str) -> dict:
+    graph_dict = {}
+    my_files = list(os.walk(dirname))[0]
+    cntPdb = 0
+    for z in my_files[2]:
+        nodes_p_entry = {}
+        nodes_p = {}
+        if "_H.pdb" not in z:
+            continue
+        structure = parser.get_structure(z, dirname + "/" + z)
+        print('building ',z)
+        for atom in structure.get_atoms():
+            coord= atom.coord
+            nodes_p[atom.serial_number] = (atom.name, coord[0],coord[1],coord[2])
+            
+            # check if atom is hetatm -> https://stackoverflow.com/questions/25718201/remove-heteroatoms-from-pdb
+            tags = atom.get_full_id()
+            nodes_p_entry[atom.serial_number] = 'HETATM' if tags[3][0] != ' ' else 'ATOM'
         
+        try: # for hydro
+            u = mda.Universe(dirname + "/" + z)
+            if not hasattr(u,"atoms") or not all ([hasattr(atom,"bonds") for atom in u.atoms]):
+                clean_fd_mda(dirname + "/" + z)
+                continue
+            
+        except:
+            clean_fd_mda(dirname + "/" + z)
+            continue
+
+        graph_dict[z] = (nodes_p, nodes_p_entry, u.atoms)
+        clean_fd_mda(dirname + z)
+        cntPdb+=1 
+
+    print('Tot pdb = {}'.format(cntPdb))
+    return graph_dict
+
 def graph_from_file(dirname: str) -> dict:
     graph_dict = {}
     my_files = list(os.walk(dirname))[0]
@@ -130,13 +174,20 @@ def graph_from_file(dirname: str) -> dict:
         with open(dirname + "/" + z, "r") as f:
             cntPdb+=1
             print('building ',z)
+            index_valid_cols,ncols = 0,0
             for l in f:
                 try:
                     l = l.split()
 
                     if l[0] == "ATOM" or l[0] == "HETATM":
                         #print(f,l)
-                    
+                        if(index_valid_cols==0):
+                            ncols = len(l)
+                            index_valid_cols+=1
+
+                        if len(l)!=ncols:
+                            raise ValueError("ncol not valid for "+z)
+                        
                         nodes_p[int(l[1])] = (l[2], float(l[6]), float(l[7]), float(l[8]))
                     
                     
@@ -150,9 +201,11 @@ def graph_from_file(dirname: str) -> dict:
         if not is_valid:
             continue
         try:
-            u = mda.Universe(dirname + "/" + z)
-            if not hasattr(u,"atoms") or not all ([hasattr(atom,"bonds") for atom in u.atoms]):
-                continue
+            with open(dirname + "/" + z) as f:
+                u = mda.Universe(dirname + "/" + z)
+                if not hasattr(u,"atoms") or not all ([hasattr(atom,"bonds") for atom in u.atoms]):
+                    continue
+                del u
         except:
             continue
         
@@ -231,6 +284,7 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
     ]
 
     atom_type_list = list(set(reduce(lambda x, y: x + y, atom_type_list)))
+    
     element_list = list(set([el[0] for el in atom_type_list]))
     global_node_list_order = {
         k: list(graph_dict[k][0].keys()) for k in graph_dict.keys()
@@ -259,7 +313,7 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
             assert n_hydro < 5
             n_hydro_hot[n_hydro] = 1
             hydrogen_label.append(n_hydro_hot)
-
+        
         # Multigraph generation
         # add edges in a edge list based on distance threshold. We add edge if the distance between two nodes, is < threshold
         #print('end atom loop ',fname)
@@ -270,7 +324,7 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
         ):  # we consider all possible nodes pair (kv_1,kv_2)
             node_k1, node_v1 = kv_1[0], kv_1[1]
             node_k2, node_v2 = kv_2[0], kv_2[1]
-            if euclidean_distance(node_v1[1:], node_v2[1:]) < 3.0:
+            if euclidean_distance(node_v1[1:], node_v2[1:]) < 9.0:
                 my_edges.append(
                     (node_list_order.index(node_k1), node_list_order.index(node_k2))
                 )  # ,{'treshold':9.0}))
@@ -327,14 +381,15 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
             element_node = [0] * len(element_list)
             element_node[element_list.index(nodes_p[node][0][0])] = 1
             label = {
-                "attributes": label_node
-                + atom_type_node
-                + element_node
-                + hydrogen_label[i]
+                "attributes": [label_node
+                , atom_type_node
+                , element_node
+                , hydrogen_label[i]]
             }
 
             labels[node] = label
 
+        
         global_G[fname] = (G, labels)
         print("{} ohe completed".format(fname))
 
@@ -354,22 +409,26 @@ def euclidean_distance(p, q: float) -> float:
     return math.sqrt(((p[0] - q[0]) ** 2) + ((p[1] - q[1]) ** 2) + ((p[2] - q[2]) ** 2))
 
 if __name__ == "__main__":
-    valid_pdb("/home/nmekni/Documents/NLRP3/InterGraph/data/PDB/data_test/")
-    graph_dict = graph_from_file(
-        "/home/nmekni/Documents/NLRP3/InterGraph/data/PDB/data_test/"
+    #valid_pdb("/home/nmekni/Documents/NLRP3/InterGraph/data/PDB/data/")
+    valid_pdb("/data/shared/projects/NLRP3/data/PDB/data/")
+    #valid_pdb("/data/shared/projects/NLRP3/data")
+    #graph_dict = graph_from_file("/data/shared/projects/NLRP3/data/PDB/data/")
+    graph_dict = biograph_from_file(
+        "/data/shared/projects/NLRP3/data/PDB/data/"
     
     )
 
-    exit()
-    csv_file  = "/home/nmekni/Documents/NLRP3/InterGraph/scripts/y_preprocessed.csv"
+    
+    csv_file  = "/home/nmekni/Documents/NLRP3/InterGraph/scripts/y_preprocessed_IQR_10_100000.csv"
 
     y_dict = data_activities_from_file(csv_file)
     graph_dict = filter_with_y(graph_dict,y_dict)
-    graph_dict = {k:graph_dict[k] for k in list(graph_dict.keys())[:2000]}
+    graph_dict = {k:graph_dict[k] for k in list(graph_dict.keys())[:]}
     global_G = build_graph_dict(graph_dict, y_dict)
-    torch.save(global_G,'tensorG_2000_test2.pt')
+    torch.save(global_G,'tensorG_label_test_static_rule.pt')
     print(len(global_G.keys()))
     
+
     
     
     
