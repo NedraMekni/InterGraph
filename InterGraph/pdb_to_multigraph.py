@@ -1,110 +1,59 @@
 import math
 import os
-import psutil
 import itertools
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-import scipy.stats as stats
 import torch
 import csv
-import torch.nn as nn
-import MDAnalysis as mda
-import matplotlib.pyplot as plt
-import torch.nn.functional as F
-from torch_geometric.nn import global_mean_pool
 from Bio.PDB import *
+import MDAnalysis as mda
 
-from torch.nn import Linear
-from torch_geometric.nn import GCNConv
-from torch.utils.data.sampler import SubsetRandomSampler
-from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data
 from functools import reduce
 
 parser = PDBParser()
-device = "cpu" #torch.device("cuda:0") if torch.cuda.is_available() else "cpu"
-proc = psutil.Process() # psutils clean mda open files
-"""
-GCN extends torch.nn.module adding some properties and defying forward method
-"""
+device = "cpu"  # torch.device("cuda:0") if torch.cuda.is_available() else "cpu"
+
+CACHE_PDB = None
 
 
-class GCN(torch.nn.Module):
-    def __init__(self, num_features):
-        super().__init__()
-        torch.manual_seed(1234)
-        self.conv1 = GCNConv(num_features, 16)
-        self.conv2 = GCNConv(16, 128)
-        self.conv3 = GCNConv(128, 128)
-        self.conv4 = GCNConv(128, 64) 
-        self.conv5 = GCNConv(64, 64)# NOTE: a 4th conv layer!
-        self.classifier = Linear(64, 1)
-        #self.linear1 = torch.nn.Linear(2, 1)
+def get_cache(cache_fname, cached_graph):
+    global CACHE_PDB
+    if os.path.isfile(cache_fname):
+        if not os.path.exists(cached_graph):
+            os.mkdir(cached_graph)
+        with open(cache_fname, "r") as f:
+            lines = f.readlines()
+            CACHE_PDB = [x.strip() for x in lines]
 
-       
+    else:
+        if os.path.exists(cached_graph):
+            os.system("rm -r " + cached_graph)
+        os.mkdir(cached_graph)
+        CACHE_PDB = []
 
-    def forward(self, x, edge_index,batch):
-        h = self.conv1(x, edge_index)
-        h = h.tanh()
-        h = self.conv2(h, edge_index)
-        h = h.tanh()
-        h = self.conv3(h, edge_index)
-        h = h.tanh()
-        h = self.conv4(h, edge_index)
-        h = h.tanh()
-        h = self.conv5(h, edge_index)
-        h = h.tanh()
-        h = global_mean_pool(h,batch)
-        out = self.classifier(h)
-        
-        return out#, h
+    print("CACHE PDB = {}".format(CACHE_PDB))
 
-"""
-Function for training GCN model
-"""
-model = GCN(1)
-model.to(device)
-calculate_mse  = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)  # Define optimizer.
-'''
-def train(data_loader):
-    model.train()
-    #calculate_mse = torch.nn.MSELoss()
-    loss = 0.0
-    for data in data_loader:
-        ref = data.y 
-        optimizer.zero_grad()     
-        out = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
-        loss_for_batch = calculate_mse(out, ref)  # Compute the loss.
-        loss_for_batch.backward()  # Derive gradients.
-        optimizer.step()  # Update parameters based on gradients.
-        #optimizer.zero_grad()  # Clear gradients.
-        loss += float(loss_for_batch.detach().item())
-    return loss#, h
-'''
-def train(data_loader):
-    model.train()
-    #calculate_mse = torch.nn.MSELoss()
-    loss = 0.0
-    for idx, data in enumerate(data_loader):
-        ref = data.y 
-        optimizer.zero_grad()  
-        print(idx)   
-        out = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
-        loss_for_batch = calculate_mse(out, ref)  # Compute the loss. (LINE 77)
-        loss_for_batch.backward()  # Derive gradients. 
-        optimizer.step()  # Update parameters based on gradients.
-        optimizer.zero_grad()  # Clear gradients.
-        loss += float(loss_for_batch.detach().item())
-    return loss#, h
+
+# max_t and min_t are nano
+def preprocess_csv(fname, outfname, max_t=100000, min_t=10):
+    df = pd.read_csv(fname, usecols=[" pdb_code", " activity"])
+    df = df.mask(df.eq(" None")).dropna()
+    df = df.astype({" activity": "float64"})
+    df = df[df[" activity"].between(min_t, max_t)]
+    assert max(df[" activity"]) <= max_t and min(df[" activity"]) >= min_t
+    new_df_cap = df.copy()
+    new_df_cap.to_csv(outfname, index=False)
+
 
 """
 Generate graph dict from PDB files
 graph dict:
-	-key: PDB file name -> str 
-	-value: graph -> tuple of dicts
+    -key: PDB file name -> str 
+    -value: graph -> tuple of dicts
 """
+
+
 def valid_pdb(dirname: str) -> None:
     my_files = list(os.walk(dirname))[0]
 
@@ -113,197 +62,246 @@ def valid_pdb(dirname: str) -> None:
             continue
         with open(dirname + "/" + z, "r") as f:
             lines = f.readlines()
-            if (not any([row.split()[0]=='ATOM' for row in lines if len(row.split())>0])) or (not any([row.split()[0]=='HETATM' for row in lines if len(row.split())>0])):
-                print('removing file {}'.format(z))
+            if (
+                not any(
+                    [row.split()[0] == "ATOM" for row in lines if len(row.split()) > 0]
+                )
+            ) or (
+                not any(
+                    [
+                        row.split()[0] == "HETATM"
+                        for row in lines
+                        if len(row.split()) > 0
+                    ]
+                )
+            ):
+                print("removing file {}".format(z))
                 os.remove(dirname + "/" + z)
 
 
-def clean_fd_mda(fname):
-    f_to_close = [f for f in proc.open_files() if f.path==fname]
-    assert len(f_to_close)==1
-    f_to_close = f_to_close[0]
-    os.close(f_to_close.fd)
-
 
 def biograph_from_file(dirname: str) -> dict:
+    global CACHE_PDB
     graph_dict = {}
     my_files = list(os.walk(dirname))[0]
+    print("my files before", my_files[2])
+    my_files = [x for x in my_files[2] if x not in CACHE_PDB]
+    print("my files ", my_files)
+    if len(my_files) == 0:
+        print("NO NEW PDB FOUND")
+        exit(0)
     cntPdb = 0
-    for z in my_files[2]:
+    for z in my_files:
         nodes_p_entry = {}
         nodes_p = {}
+        nodes_i = {}
+        elements_p = {}
         if "_H.pdb" not in z:
             continue
         structure = parser.get_structure(z, dirname + "/" + z)
-        print('building ',z)
+        print("building ", z)
+        i=0
         for atom in structure.get_atoms():
-            coord= atom.coord
-            nodes_p[atom.serial_number] = (atom.name, coord[0],coord[1],coord[2])
-            
+            coord = atom.coord
+            nodes_p[atom.serial_number] = atom
+            nodes_i[atom.serial_number] = i
+            elements_p[atom.serial_number] = atom.element
             # check if atom is hetatm -> https://stackoverflow.com/questions/25718201/remove-heteroatoms-from-pdb
             tags = atom.get_full_id()
-            nodes_p_entry[atom.serial_number] = 'HETATM' if tags[3][0] != ' ' else 'ATOM'
-        
-        try: # for hydro
+            nodes_p_entry[atom.serial_number] = (
+                "HETATM" if tags[3][0] != " " else "ATOM"
+            )
+            i+=1
+
+        try:  # for hydro
             u = mda.Universe(dirname + "/" + z)
-            if not hasattr(u,"atoms") or not all ([hasattr(atom,"bonds") for atom in u.atoms]):
-                clean_fd_mda(dirname + "/" + z)
+            if not hasattr(u, "atoms") or not all(
+                [hasattr(atom, "bonds") for atom in u.atoms]
+            ):
+                # clean_fd_mda(dirname + "/" + z)
                 continue
-            
-        except:
-            clean_fd_mda(dirname + "/" + z)
-            continue
 
-        graph_dict[z] = (nodes_p, nodes_p_entry, u.atoms)
-        clean_fd_mda(dirname + z)
-        cntPdb+=1 
-
-    print('Tot pdb = {}'.format(cntPdb))
-    return graph_dict
-
-def graph_from_file(dirname: str) -> dict:
-    graph_dict = {}
-    my_files = list(os.walk(dirname))[0]
-    cntPdb = 0
-    for z in my_files[2]:
-        nodes_p_entry = {}
-        nodes_p = {}
-        if "_H.pdb" not in z:
-            continue
-        is_valid = True
-        with open(dirname + "/" + z, "r") as f:
-            cntPdb+=1
-            print('building ',z)
-            index_valid_cols,ncols = 0,0
-            for l in f:
-                try:
-                    l = l.split()
-
-                    if l[0] == "ATOM" or l[0] == "HETATM":
-                        #print(f,l)
-                        if(index_valid_cols==0):
-                            ncols = len(l)
-                            index_valid_cols+=1
-
-                        if len(l)!=ncols:
-                            raise ValueError("ncol not valid for "+z)
-                        
-                        nodes_p[int(l[1])] = (l[2], float(l[6]), float(l[7]), float(l[8]))
-                    
-                    
-                    
-                        nodes_p_entry[int(l[1])] = l[0]
-                except ValueError:
-                    is_valid = False
-                if not is_valid :
-                    break
-                
-        if not is_valid:
-            continue
-        try:
-            with open(dirname + "/" + z) as f:
-                u = mda.Universe(dirname + "/" + z)
-                if not hasattr(u,"atoms") or not all ([hasattr(atom,"bonds") for atom in u.atoms]):
-                    continue
-                del u
         except:
             continue
-        
-        graph_dict[z] = (nodes_p, nodes_p_entry, u.atoms)
 
-    print('Tot pdb = {}'.format(cntPdb))
-    return graph_dict
+
+        graph_dict[z] = (nodes_p,nodes_p_entry,u.atoms,elements_p,nodes_i)
+        cntPdb += 1
+
+    print("Tot pdb = {}".format(cntPdb))
+    return graph_dict, my_files
+
 
 
 """
 Get activity dictionary from csv file
 y_dict:
-	-key:PDBid -> str
-	-value: activity -> float
+    -key:PDBid -> str
+    -value: activity -> float
 """
 
 
-def data_activities_from_file(fname: str) -> dict:
+def data_activities_from_file(dirname, fname: str) -> dict:
 
     label = pd.read_csv(fname, usecols=[" pdb_code", " activity"])
-    label.to_csv(r"test_y.csv", index=False)
+    label.to_csv(dirname + "/test_y.csv", index=False)
     all_rows = []
     y_dict = {}
-    with open("test_y.csv", "r") as f:
+    with open(dirname + "/test_y.csv", "r") as f:
         lines = f.readlines()[1:]
 
         for l in lines:
             elements = l.split(",")
             elements[0] = elements[0].strip()
             elements[1] = elements[1].strip()
-            
- 
+
             for k in elements[0].split(" "):
+
                 if k not in y_dict.keys():
                     y_dict[k] = []
-                    
-                try:  
+
+                try:
                     v = float(elements[1])
-                    v = - math.log10(v)
+                    v = v * (10**-9)
+                    v = -math.log10(v)
                     y_dict[k].append(v)
 
-
                 except:
-                    #print("### cast error, skip activity reading")
+                    # print("### cast error, skip activity reading")
                     continue
 
     return y_dict
 
 
-def filter_with_y(graph_dict,y_dict):
-    return {k:graph_dict[k] for k in graph_dict.keys() if k.split("_")[0]+"_1" in y_dict.keys()}
+def filter_with_y(graph_dict, y_dict):
+    return {
+        k: graph_dict[k]
+        for k in graph_dict.keys()
+        if k.split("_")[0] + "_1" in y_dict.keys()
+    }
+
+
+def get_ohe_order(fname):
+    with open(fname, "r") as f:
+        return [x.strip() for x in f.readlines()]
+
+
+def update_old_dict(diff_ohe_atom_len, diff_ohe_element_len, graph_dir):
+    files = os.listdir(graph_dir + "/cached_graph")
+    files = [
+        graph_dir + "/cached_graph/" + x for x in files if x[-3:] == ".pt"
+    ]  # select all .pt files
+
+    for f in files:
+        print("opening {}".format(f))
+        global_g = torch.load(f)
+        print("after load {}".format(f))
+
+        for k in global_g.keys():
+            local_g = global_g[k]
+            for el in local_g[1].keys():
+                local_g[1][el]["attributes"][1] += [0] * diff_ohe_atom_len
+                local_g[1][el]["attributes"][2] += [0] * diff_ohe_element_len
+        print("removing {}".format(f))
+
+        os.remove(f)  # maybe it does not overwrite on save
+        print("saving {}".format(f))
+
+        torch.save(global_g, f)
+
+
+def store_element_cache(fname, cache_list):
+    with open(fname, "w") as f:  # no append
+        for el in cache_list:
+            f.write(el + "\n")
 
 
 """
 Build multigraph edges from graph_dict
 
 global_g:
-	-key:PDB file name -> str
-	-value: graph object, node attribute -> tuple
+    -key:PDB file name -> str
+    -value: graph object, node attribute -> tuple
 """
 
-def build_graph_dict(graph_dict, y_dict:dict) -> dict:
+
+def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
     global_G = {}
     graph_x = {}
-    # ENABLE Z NORM
-    #y_list = np.array([y_dict[k][0] for k in y_dict.keys()])
+    print("IN BUILD GRAPH")
     
-    #y_list = stats.zscore(y_list)
-   
-    #y_norm_dict = {list(y_dict.keys())[i]: y_list[i] for i in range(len(y_list))}
- 
     # helper structures for one hot encoding labels and for cast dictionary graph into list
     atom_type_list = [
-        [graph_dict[k][0][k1][0] for k1 in graph_dict[k][0].keys()]
+        [graph_dict[k][0][k1].name for k1 in graph_dict[k][0].keys()]
         for k in graph_dict.keys()
     ]
 
     atom_type_list = list(set(reduce(lambda x, y: x + y, atom_type_list)))
-    
-    element_list = list(set([el[0] for el in atom_type_list]))
+
+    # atom_p = graph_dict[fname][2]
+
+    element_list = [
+        [graph_dict[k][3][k1] for k1 in graph_dict[k][3].keys()]
+        for k in graph_dict.keys()
+    ]
+    element_list = list(set(reduce(lambda x, y: x + y, element_list)))
+
+    # pescare se esiste, il vecchio ordine
+    # ho il nuovo ordine
+    # prendo l'insieme nuovo ordine - vecchio ordine
+    # aggiungo la coda di 0 alle vecchio OHE
+    # impongo il nuovo ordine in element_list e atom_type_list
+    # expand per gli attual
+    print("len cache pdb ", len(CACHE_PDB))
+
+    if len(CACHE_PDB) > 0:
+        print("before read get_ohe_order")
+        print("reading ", ohe_path + "/.ohe_atom_order")
+        old_atom_order = get_ohe_order(ohe_path + "/.ohe_atom_order")
+        old_element_order = get_ohe_order(ohe_path + "/.ohe_element_order")
+        print("after read get_ohe_order")
+        diff_ohe_atom = [x for x in atom_type_list if x not in old_atom_order]
+        diff_ohe_element = [x for x in element_list if x not in old_element_order]
+        if len(diff_ohe_atom) == 0:
+            atom_type_list = old_atom_order.copy()
+            element_list = old_element_order.copy()
+        else:
+            # update_old_dict
+            update_old_dict(len(diff_ohe_atom), len(diff_ohe_element), ohe_path)
+            atom_type_list = old_atom_order.copy()
+            atom_type_list += diff_ohe_atom
+
+            element_list = old_element_order.copy()
+            element_list += diff_ohe_element
+
+    print("after ohe read")
     global_node_list_order = {
         k: list(graph_dict[k][0].keys()) for k in graph_dict.keys()
     }
 
     print("building adjacence list for each graph")
-    graph_dict = {k: graph_dict[k] for k in graph_dict.keys() if k.split("_")[0] + "_1" in y_dict.keys()}
+    graph_dict = {
+        k: graph_dict[k]
+        for k in graph_dict.keys()
+        if k.split("_")[0] + "_1" in y_dict.keys()
+    }
     for fname in graph_dict.keys():
-        print("building adjacence list of ",fname)
+        print("building adjacence list of ", fname)
         my_edges = []
         # node_p and node_p_etry are two dictionaries storing nodes
 
         nodes_p = graph_dict[fname][0]
         nodes_p_entry = graph_dict[fname][1]
         atom_p = graph_dict[fname][2]
+        elements_p = graph_dict[fname][3]
+        nodes_i = graph_dict[fname][4]
+
+        ns =  NeighborSearch(list(nodes_p.values()))
         node_list_order = global_node_list_order[fname]  # to build adj list
+        
         # bulding H label for each node
         # for each atom in atom struct extract the n of H
-        hydrogen_label = []
+        hydrogen_label = {}
         for atom in atom_p:
             neighbour_atoms = list(atom.bonds)
             n_hydro = len(
@@ -312,56 +310,29 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
             n_hydro_hot = [0] * 5
             assert n_hydro < 5
             n_hydro_hot[n_hydro] = 1
-            hydrogen_label.append(n_hydro_hot)
-        
+            hydrogen_label[atom.id] = n_hydro_hot
+
+
         # Multigraph generation
-        # add edges in a edge list based on distance threshold. We add edge if the distance between two nodes, is < threshold
-        #print('end atom loop ',fname)
-        #print('number of atoms: ',len(nodes_p.items()))
 
-        for kv_1, kv_2 in itertools.combinations(
-            nodes_p.items(), 2
-        ):  # we consider all possible nodes pair (kv_1,kv_2)
-            node_k1, node_v1 = kv_1[0], kv_1[1]
-            node_k2, node_v2 = kv_2[0], kv_2[1]
-            if euclidean_distance(node_v1[1:], node_v2[1:]) < 9.0:
-                my_edges.append(
-                    (node_list_order.index(node_k1), node_list_order.index(node_k2))
-                )  # ,{'treshold':9.0}))
-                my_edges.append(
-                    (node_list_order.index(node_k2), node_list_order.index(node_k1))
-                )  # ,{'treshold':9.0}))
-                
-                if euclidean_distance(node_v1[1:], node_v2[1:]) < 6.0:
-                    my_edges.append(
-                        (node_list_order.index(node_k1), node_list_order.index(node_k2))
-                    )  # ,{'treshold':6.0}))
-                    my_edges.append(
-                        (node_list_order.index(node_k2), node_list_order.index(node_k1))
-                    )  # ,{'treshold':6.0}))
+        for k in nodes_p.keys():
+            node = nodes_p[k]
+            adjs = [h for h in ns.search( node.get_coord(), 3, 'A')]
+            adjs += [h for h in ns.search( node.get_coord(), 6, 'A')]
+            adjs += [h for h in ns.search( node.get_coord(), 9, 'A')]
+            my_edges+=[(nodes_i[node.serial_number],nodes_i[adj.serial_number]) for adj in adjs]
 
-                    if euclidean_distance(node_v1[1:], node_v2[1:]) < 3.0:
-                        my_edges.append(
-                            (node_list_order.index(node_k1), node_list_order.index(node_k2))
-                        )  # ,{'treshold':3.0}))
-                        my_edges.append(
-                            (node_list_order.index(node_k2), node_list_order.index(node_k1))
-                        )  # ,{'treshold':3.0}))
-                
-        print('end treshold loop ',fname)
+
+        print("end treshold loop ", fname)
         # build pytorch data graph
         nodes_p_final = list(nodes_p.keys())
         nodes_p_tensor = [[x] for x in list(nodes_p.keys())]
-        graph_data_x = torch.tensor(nodes_p_tensor, dtype=torch.float,device = device)
-        graph_edge = torch.tensor(my_edges, dtype=torch.long,device = device)
-       #print(y_dict[fname.split("_")[0] + "_1"])
-        y_tensor = torch.tensor([[y_dict[fname.split("_")[0] + "_1"][0]]], dtype = torch.float,device = device)
-        #y_tensor = torch.tensor([[y_norm_dict[fname.split("_")[0] + "_1"]]], dtype = torch.float)
-       
-        
-        #print("y tensor", y_tensor)
+        graph_data_x = torch.tensor(nodes_p_tensor, dtype=torch.float, device=device)
+        graph_edge = torch.tensor(my_edges, dtype=torch.long, device=device)
+        y_tensor = torch.tensor(
+            [[y_dict[fname.split("_")[0] + "_1"][0]]], dtype=torch.float, device=device
+        )
 
-        #print("data.x size: ", graph_data_x.size())
         G = Data(
             x=graph_data_x,
             edge_index=graph_edge.t().contiguous(),
@@ -371,33 +342,34 @@ def build_graph_dict(graph_dict, y_dict:dict) -> dict:
         graph_x[fname] = nodes_p_final
         labels = {}
 
-        # build hot-encoding for each node in G. 
-        for i, node in enumerate(nodes_p_final):
-            label_node = [0] if nodes_p[node] == "ATOM" else [1]
+        # build hot-encoding for each node in G.
+
+        for node in nodes_p_final:
+            label_node = [0] if nodes_p_entry[node] == "ATOM" else [1]
             atom_type_node = [0] * len(atom_type_list)  # inizialise vector all 0
             atom_type_node[
-                atom_type_list.index(nodes_p[node][0])
+                atom_type_list.index(nodes_p[node].name)
             ] = 1  # build when atom type== 1
             element_node = [0] * len(element_list)
-            element_node[element_list.index(nodes_p[node][0][0])] = 1
+            element_node[element_list.index(elements_p[node])] = 1
             label = {
-                "attributes": [label_node
-                , atom_type_node
-                , element_node
-                , hydrogen_label[i]]
+                "attributes": [
+                    label_node,
+                    atom_type_node,
+                    element_node,
+                    hydrogen_label[node]
+                ]
             }
 
             labels[node] = label
 
-        
         global_G[fname] = (G, labels)
         print("{} ohe completed".format(fname))
 
+    store_element_cache(ohe_path + "/.ohe_atom_order", atom_type_list)
+    store_element_cache(ohe_path + "/.ohe_element_order", element_list)
 
     return global_G
-    
-
-
 
 
 """
@@ -408,27 +380,13 @@ Compute euclidian distance between pair of coordinates
 def euclidean_distance(p, q: float) -> float:
     return math.sqrt(((p[0] - q[0]) ** 2) + ((p[1] - q[1]) ** 2) + ((p[2] - q[2]) ** 2))
 
-if __name__ == "__main__":
-    #valid_pdb("/home/nmekni/Documents/NLRP3/InterGraph/data/PDB/data/")
-    valid_pdb("/data/shared/projects/NLRP3/data/PDB/data/")
-    #valid_pdb("/data/shared/projects/NLRP3/data")
-    #graph_dict = graph_from_file("/data/shared/projects/NLRP3/data/PDB/data/")
-    graph_dict = biograph_from_file(
-        "/data/shared/projects/NLRP3/data/PDB/data/"
-    
-    )
 
-    
-    csv_file  = "/home/nmekni/Documents/NLRP3/InterGraph/scripts/y_preprocessed_IQR_10_100000.csv"
+def save_graphs(global_G, dirname):
+    my_files = list(os.walk(dirname))[0][2]
+    torch.save(global_G, dirname + "/tensorG_{}.pt".format(len(my_files)))
 
-    y_dict = data_activities_from_file(csv_file)
-    graph_dict = filter_with_y(graph_dict,y_dict)
-    graph_dict = {k:graph_dict[k] for k in list(graph_dict.keys())[:]}
-    global_G = build_graph_dict(graph_dict, y_dict)
-    torch.save(global_G,'tensorG_label_test_static_rule.pt')
-    print(len(global_G.keys()))
-    
 
-    
-    
-    
+def write_cache(cache_fname, cache_list):
+    with open(cache_fname, "a") as f:
+        for k in cache_list:
+            f.writelines(k + "\n")

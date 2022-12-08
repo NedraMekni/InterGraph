@@ -183,9 +183,9 @@ def get_id_mapping_results_stream(url):
 ########################
 
 
-def retrieve_pdb_data(compounds: str):
+def retrieve_pdb_data(compounds: str, raw_path: str):
     """Given the ligand ChEBML id, this function writes a csv file adding the ligand PDBid to the information stored in data_from_chembl.csv"""
-    f = open("../data/csv/raw_data.csv", "w")
+    f = open(raw_path, "w")
     f.write(
         "target_chembl_id, target_uniprot_id, pref_name, canonical_smiles, IC50 uM, molecule_chembl_id, assay_chembl_id, pdb_comp_id\n"
     )
@@ -350,7 +350,7 @@ def write_clean_raw_data(inputfile, outputfile):
         for l in f.readlines()[1:]:
             l = l.split(",")
             targets.append(l[0].strip())
-
+    print(targets)
     chembl_pdb_target_dict = retrieve_pdb_from_target(targets)
     # print(chembl_pdb_target_dict)
 

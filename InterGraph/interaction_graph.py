@@ -356,7 +356,7 @@ def mol_to_graph(
     return c_size, features, edge_index
 
 
-def save_structure(fname: str):
+def save_structure(fname: str, datadir: str):
     """This function generated multiple subdirestories for each protein-ligand system .
 
     Every subdirectory is named after its protein-ligand complex and it contains the input files required to generated the molecular graph:
@@ -386,13 +386,13 @@ def save_structure(fname: str):
                 prot, lig = parse_pdb(pdb_lig, pdb_raw_d + "/" + pdb_prot + ".pdb")
 
                 if not os.path.exists(
-                    "/data/shared/projects/NLRP3/data/PDB/data/"
+                    datadir+"/PDB/data/"
                     + pdb_prot
                     + "_"
                     + pdb_lig
                 ):
                     os.makedirs(
-                        "/data/shared/projects/NLRP3/data/PDB/data/"
+                        datadir+"/PDB/data/"
                         + pdb_prot
                         + "_"
                         + pdb_lig
@@ -400,7 +400,7 @@ def save_structure(fname: str):
                     write_pdb(
                         prot,
                         lig,
-                        "/data/shared/projects/NLRP3/data/PDB/data/"
+                        datadir+"/PDB/data/"
                         + pdb_prot
                         + "_"
                         + pdb_lig
@@ -411,7 +411,7 @@ def save_structure(fname: str):
                         + ".pdb",
                     )
                     if not os.path.exists(
-                        "/data/shared/projects/NLRP3/data/PDB/data/"
+                        datadir+"/PDB/data/"
                         + pdb_prot
                         + "_"
                         + pdb_lig
@@ -421,7 +421,7 @@ def save_structure(fname: str):
                     ):
                         write_ligand_pdb(
                             lig,
-                            "/data/shared/projects/NLRP3/data/PDB/data/"
+                            datadir+"/PDB/data/"
                             + pdb_prot
                             + "_"
                             + pdb_lig
@@ -431,7 +431,7 @@ def save_structure(fname: str):
                         )
 
                         for file in os.listdir(
-                            "/data/shared/projects/NLRP3/data/PDB/data/"
+                            datadir+"/PDB/data/"
                             + pdb_prot
                             + "_"
                             + pdb_lig
@@ -439,7 +439,7 @@ def save_structure(fname: str):
                         ):
                             if file.endswith(f"{pdb_lig}.pdb"):
                                 file_path = (
-                                    "/data/shared/projects/NLRP3/data/PDB/data/"
+                                    datadir+"/PDB/data/"
                                     + pdb_prot
                                     + "_"
                                     + pdb_lig
@@ -454,7 +454,7 @@ def save_structure(fname: str):
                                 mol.AddHydrogens()
                                 obConversion.WriteFile(
                                     mol,
-                                    "/data/shared/projects/NLRP3/data/PDB/data/"
+                                    datadir+"/PDB/data/"
                                     + pdb_prot
                                     + "_"
                                     + pdb_lig
@@ -462,3 +462,12 @@ def save_structure(fname: str):
                                     + f"{pdb_lig}.mol2",
                                 )
                                 obConversion.CloseOutFile()
+
+def merge_window(window_csv, final_csv, has_checkpoint):
+    if(not has_checkpoint):
+        os.system('cp '+window_csv+' '+final_csv)
+    else:
+        with open(window_csv,'r') as w:
+            with open(final_csv,'a') as f:
+                for l in w.readlines()[1:]:
+                    f.write(l)
