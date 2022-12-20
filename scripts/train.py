@@ -65,97 +65,26 @@ class GCN(torch.nn.Module):
         return out
       
 
-def train1(data_loader):
-    global model
-    #model.train()
-    #calculate_mse = torch.nn.MSELoss()
-    # https://stackoverflow.com/questions/71527963/how-can-i-send-a-data-loader-to-the-gpu-in-google-colab
-    acc=torch.zeros(1)
-    acc=acc.to(device)
-    loss= 0.0
-    for idx, data in enumerate(data_loader):
-        print(idx)
-        print('Before send {} to GPU (mem): {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-
-        data = data.to(device)
-        ref = data.y 
-
-        print('After send {} to GPU (mem): {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-  
-        print('Before using model {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-
-        out = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
-        
-        print('After using model {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-
-
-        loss_for_batch = calculate_mse(out, ref)  # Compute the loss. (LINE 77)
-
-        loss_for_batch = torch.unsqueeze(loss_for_batch, dim=0)
-        acc = torch.cat((loss_for_batch,acc))
-        loss_for_batch.backward()  # Derive gradients. 
-
-        #optimizer.zero_grad()  # Clear gradients.
-        #loss += float(loss_for_batch.detach().cpu().item())
-        print('Loss for batch = {}'.format(loss_for_batch.detach().cpu().item()))
-
-        if (idx+1)%10 == 0:
-            print('End batch {}'.format(idx))
-            print('Before using opt step {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-            optimizer.step()  # Update parameters based on gradients.
-            print('After using opt step {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-            print('Before using zero grad {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-            optimizer.zero_grad()
-            print('After using zero grad {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-
-    
-        del out
-        del loss_for_batch
-        del data
-        torch.cuda.empty_cache()
-        gc.collect()
-    
-        print('After free mem {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-
-    loss = acc.sum()
-    #loss=acc.sum()
-    #loss += float(loss_for_batch.detach().item())
-    return loss
-
-
 def train(data_loader):
     global model
-    #model.train()
-    #calculate_mse = torch.nn.MSELoss()
-    # https://stackoverflow.com/questions/71527963/how-can-i-send-a-data-loader-to-the-gpu-in-google-colab
+    
     loss = 0.0
     for idx, data in enumerate(data_loader):
         print(idx)
-        #print('Before send batch {} to GPU (mem): {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-
         data = data.to(device)
         ref = data.y 
 
-        #print('After send batch {} to GPU (mem): {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-  
-        #print('Before using model {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-
         out = model(data.x, data.edge_index, data.batch)  # Perform a single forward pass.
         
-        #print('After using model {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
 
-        loss_for_batch = calculate_mse(out, ref)  # Compute the loss. (LINE 77)
+        loss_for_batch = calculate_mse(out, ref)  # Compute the loss. 
         loss_for_batch.backward()  # Derive gradients. 
         
-        #optimizer.zero_grad()  # Clear gradients.
         loss += float(loss_for_batch.detach().cpu().item())
-        #print('Loss for batch = {}'.format(loss_for_batch.detach().cpu().item()))
-        #print('Before using opt step {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
+        
         optimizer.step()  # Update parameters based on gradients.
-        #print('After using opt step {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-        #print('Before using zero grad {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
+        
         optimizer.zero_grad()
-        #print('After using zero grad {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
 
     
         del out
@@ -164,10 +93,6 @@ def train(data_loader):
         torch.cuda.empty_cache()
         gc.collect()
     
-        #print('After free mem {}, GPU mem: {}'.format(idx,torch.cuda.memory_allocated()/(1024**3)))
-
-
-        #loss += float(loss_for_batch.detach().item())
     return loss
 
 
@@ -231,10 +156,9 @@ if __name__ == "__main__":
     num_features = pytg_graph_dict[k0].num_node_features
     model = GCN(pytg_graph_dict[k0].num_node_features)
     model.to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr= 0.1)#, momentum=0.9) # Define optimizer.
+    optimizer = torch.optim.SGD(model.parameters(), lr= 0.1, momentum=0.9) # Define optimizer.
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.00004) # Define optimizer.
-    #pytg_graph_dict = {k: global_G[k][0] for k in global_G.keys()}
-
+  
     graph_list = []
     graph_y = []
 
@@ -250,7 +174,6 @@ if __name__ == "__main__":
     
     batch_size = 10
     print(len(graph_list))
-    #exit()
     limit_g = (len(graph_list)//batch_size)*batch_size
     graph_list = graph_list[:limit_g]
     graph_y = graph_y[:limit_g]
@@ -258,54 +181,28 @@ if __name__ == "__main__":
     #graph_list = compress_graph_nodes(graph_list)
     
     print(limit_g)
-    #exit()
+    
     del pytg_graph_dict
     del global_G
 
 
 
     loader = DataLoader(graph_list, batch_size=batch_size,shuffle=True)
-    #loader = DataLoader(graph_list)
-    #print(len(graph_list))
-    #print(graph_list[0].size())
-    #print(type(graph_list[0]))
-    
+
     print("end data loader")
-    #torch.cuda.empty_cache()
     loss_values = []
 
-    for epoch in range(3000):
-        #print(torch.cuda.max_memory_allocated())
+    for epoch in range(6001):
         loss_init = train(loader)
         torch.cuda.empty_cache()
-        #print(torch.cuda.max_memory_allocated())
-        #torch.cuda.empty_cache()
+
         loss_values.append(loss_init)
         print('##### EPOCH {} #####'.format(epoch))
-        with open("result_7.txt", 'a') as out:
+        with open("result_10.txt", 'a') as out:
             out.write(f"Epoch: {epoch:03d}, loss: {loss_init:.4f}, min_loss: {min(loss_values):.4f} \n")
         print(f"Epoch: {epoch:03d}, loss: {loss_init:.4f}")
-    with open("loss_for_plot1.txt","w") as out:
+    with open("loss_for_plot_2.txt","w") as out:
         out.write(str(loss_values))
-            
-        
-    #print(loss_values)
+                    
     print(loss_values)
-    exit() 
-    plt.plot(loss_values, label="loss value")
-    plt.ylabel("Loss")
-    plt.xlabel("Epoch")
-    major_ticks = np.arange(0,301,10)
-    minor_ticks = np.arange(0,301,5)
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    ax.set_yticks(major_ticks)
-    ax.set_yticks(minor_ticks, minor=True)
-    plt.plot(loss_values, label="loss value")
-    plt.ylabel("Loss")
-
-    plt.ylim(0,max(loss_values))
-    plt.xlabel("Epoch")
-    plt.legend()
-    plt.savefig("loss_target_4185_15_batch_GPU_3000epochs_lr_0.0001.png")
-    #plt.show()
+    

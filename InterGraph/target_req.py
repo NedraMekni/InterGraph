@@ -100,6 +100,7 @@ def retrieve_chembl_data(fname,checkpoint):
         global_counter+=1
         prot_chembl_id = prot["target_chembl_id"]
         if len(prot["cross_references"]) == 0:
+            print('Missing cross-reference target window index {}'.format(global_counter))
             continue
         prot_uniprot_id = prot["cross_references"][0]["xref_id"]
         pref_name = prot["pref_name"]

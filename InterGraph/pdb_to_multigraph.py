@@ -17,7 +17,18 @@ device = "cpu"  # torch.device("cuda:0") if torch.cuda.is_available() else "cpu"
 CACHE_PDB = None
 
 
-def get_cache(cache_fname, cached_graph):
+def get_cache(cache_fname: str, cached_graph: str) -> None:
+
+    """
+    Get the cached PDB files from a cache file or create a new cache.
+
+    Parameters:
+    - cache_fname (str): A string specifying the cache file name.
+    - cached_graph (str): A string specifying the directory for the cached PDB files.
+
+    Returns:
+    None
+    """
     global CACHE_PDB
     if os.path.isfile(cache_fname):
         if not os.path.exists(cached_graph):
@@ -36,7 +47,19 @@ def get_cache(cache_fname, cached_graph):
 
 
 # max_t and min_t are nano
-def preprocess_csv(fname, outfname, max_t=100000, min_t=10):
+def preprocess_csv(fname: str, outfname: str, max_t=100000, min_t=10) -> None:
+    """
+    Preprocess a CSV file by filtering rows based on activity values and saving the resulting dataframe to a new file.
+
+    Parameters:
+    - fname (str): A string specifying the input CSV file name.
+    - outfname (str): A string specifying the output CSV file name.
+    - max_t (int, optional): An integer specifying the maximum activity value to include in the output dataframe. Default is 100000nM.
+    - min_t (int, optional): An integer specifying the minimum activity value to include in the output dataframe. Default is 10nM.
+
+    Returns:
+    None
+    """
     df = pd.read_csv(fname, usecols=[" pdb_code", " activity"])
     df = df.mask(df.eq(" None")).dropna()
     df = df.astype({" activity": "float64"})
@@ -44,14 +67,6 @@ def preprocess_csv(fname, outfname, max_t=100000, min_t=10):
     assert max(df[" activity"]) <= max_t and min(df[" activity"]) >= min_t
     new_df_cap = df.copy()
     new_df_cap.to_csv(outfname, index=False)
-
-
-"""
-Generate graph dict from PDB files
-graph dict:
-    -key: PDB file name -> str 
-    -value: graph -> tuple of dicts
-"""
 
 
 def valid_pdb(dirname: str) -> None:
@@ -79,8 +94,13 @@ def valid_pdb(dirname: str) -> None:
                 os.remove(dirname + "/" + z)
 
 
-
 def biograph_from_file(dirname: str) -> dict:
+    """
+    Generate graph dict from PDB files
+    graph dict:
+    -key: PDB file name -> str
+    -value: graph -> tuple of dicts
+    """
     global CACHE_PDB
     graph_dict = {}
     my_files = list(os.walk(dirname))[0]
@@ -100,7 +120,7 @@ def biograph_from_file(dirname: str) -> dict:
             continue
         structure = parser.get_structure(z, dirname + "/" + z)
         print("building ", z)
-        i=0
+        i = 0
         for atom in structure.get_atoms():
             coord = atom.coord
             nodes_p[atom.serial_number] = atom
@@ -111,7 +131,7 @@ def biograph_from_file(dirname: str) -> dict:
             nodes_p_entry[atom.serial_number] = (
                 "HETATM" if tags[3][0] != " " else "ATOM"
             )
-            i+=1
+            i += 1
 
         try:  # for hydro
             u = mda.Universe(dirname + "/" + z)
@@ -124,24 +144,24 @@ def biograph_from_file(dirname: str) -> dict:
         except:
             continue
 
-
-        graph_dict[z] = (nodes_p,nodes_p_entry,u.atoms,elements_p,nodes_i)
+        graph_dict[z] = (nodes_p, nodes_p_entry, u.atoms, elements_p, nodes_i)
         cntPdb += 1
 
     print("Tot pdb = {}".format(cntPdb))
     return graph_dict, my_files
 
 
-
-"""
-Get activity dictionary from csv file
-y_dict:
-    -key:PDBid -> str
-    -value: activity -> float
-"""
-
-
 def data_activities_from_file(dirname, fname: str) -> dict:
+    """
+    Extract data and activities from a file.
+
+    Parameters:
+    - dirname (str): A string specifying the directory name.
+    - fname (str): A string specifying the file name.
+
+    Returns:
+    - dict: A dictionary containing data and activities extracted from the file.
+    """
 
     label = pd.read_csv(fname, usecols=[" pdb_code", " activity"])
     label.to_csv(dirname + "/test_y.csv", index=False)
@@ -173,7 +193,7 @@ def data_activities_from_file(dirname, fname: str) -> dict:
     return y_dict
 
 
-def filter_with_y(graph_dict, y_dict):
+def filter_with_y(graph_dict: dict, y_dict: dict) -> dict:
     return {
         k: graph_dict[k]
         for k in graph_dict.keys()
@@ -181,12 +201,34 @@ def filter_with_y(graph_dict, y_dict):
     }
 
 
-def get_ohe_order(fname):
+def get_ohe_order(fname: str) -> list:
+    """
+    Get the order of the one-hot encoded features from a file.
+
+    Parameters:
+    - fname (str): A string specifying the file name.
+
+    Returns:
+    - list: A list of strings containing the one-hot encoded feature names in the order they appear in the file.
+    """
     with open(fname, "r") as f:
         return [x.strip() for x in f.readlines()]
 
 
-def update_old_dict(diff_ohe_atom_len, diff_ohe_element_len, graph_dir):
+def update_old_dict(
+    diff_ohe_atom_len: int, diff_ohe_element_len: int, graph_dir: str
+) -> None:
+    """
+    Update the attributes of one-hot encoded atoms and elements in a dictionary of graphs stored in a directory.
+
+    Parameters:
+    - diff_ohe_atom_len (int): An integer specifying the number of additional one-hot encoded atom attributes to add.
+    - diff_ohe_element_len (int): An integer specifying the number of additional one-hot encoded element attributes to add.
+    - graph_dir (str): A string specifying the directory containing the stored graphs.
+
+    Returns:
+    None
+    """
     files = os.listdir(graph_dir + "/cached_graph")
     files = [
         graph_dir + "/cached_graph/" + x for x in files if x[-3:] == ".pt"
@@ -210,26 +252,28 @@ def update_old_dict(diff_ohe_atom_len, diff_ohe_element_len, graph_dir):
         torch.save(global_g, f)
 
 
-def store_element_cache(fname, cache_list):
+def store_element_cache(fname: str, cache_list: list) -> None:
     with open(fname, "w") as f:  # no append
         for el in cache_list:
             f.write(el + "\n")
 
 
-"""
-Build multigraph edges from graph_dict
-
-global_g:
-    -key:PDB file name -> str
-    -value: graph object, node attribute -> tuple
-"""
-
-
 def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
+    """
+    Build a graph dictionary from a y dictionary and a path to an OHE file.
+
+    Parameters:
+    - graph_dict (dict): A dictionary containing graph information.
+    - y_dict (dict): A dictionary containing y values.
+    - ohe_path (str): A string specifying the path to the OHE file.
+
+    Returns:
+    - dict: A dictionary containing updated graph information.
+    """
     global_G = {}
     graph_x = {}
     print("IN BUILD GRAPH")
-    
+
     # helper structures for one hot encoding labels and for cast dictionary graph into list
     atom_type_list = [
         [graph_dict[k][0][k1].name for k1 in graph_dict[k][0].keys()]
@@ -238,20 +282,18 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
 
     atom_type_list = list(set(reduce(lambda x, y: x + y, atom_type_list)))
 
-    # atom_p = graph_dict[fname][2]
-
     element_list = [
         [graph_dict[k][3][k1] for k1 in graph_dict[k][3].keys()]
         for k in graph_dict.keys()
     ]
     element_list = list(set(reduce(lambda x, y: x + y, element_list)))
 
-    # pescare se esiste, il vecchio ordine
-    # ho il nuovo ordine
-    # prendo l'insieme nuovo ordine - vecchio ordine
-    # aggiungo la coda di 0 alle vecchio OHE
-    # impongo il nuovo ordine in element_list e atom_type_list
-    # expand per gli attual
+    # retrieve the order
+    # get the new order
+    # merge
+    # appending a series of 0s to the end of the one-hot encoding
+    # set the new order to Element_list and atom_type_list
+
     print("len cache pdb ", len(CACHE_PDB))
 
     if len(CACHE_PDB) > 0:
@@ -296,9 +338,9 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
         elements_p = graph_dict[fname][3]
         nodes_i = graph_dict[fname][4]
 
-        ns =  NeighborSearch(list(nodes_p.values()))
+        ns = NeighborSearch(list(nodes_p.values()))
         node_list_order = global_node_list_order[fname]  # to build adj list
-        
+
         # bulding H label for each node
         # for each atom in atom struct extract the n of H
         hydrogen_label = {}
@@ -312,16 +354,18 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
             n_hydro_hot[n_hydro] = 1
             hydrogen_label[atom.id] = n_hydro_hot
 
-
         # Multigraph generation
+        # Find adjacencies for each node in nodes_p and add them to my_edges
 
         for k in nodes_p.keys():
             node = nodes_p[k]
-            adjs = [h for h in ns.search( node.get_coord(), 3, 'A')]
-            adjs += [h for h in ns.search( node.get_coord(), 6, 'A')]
-            adjs += [h for h in ns.search( node.get_coord(), 9, 'A')]
-            my_edges+=[(nodes_i[node.serial_number],nodes_i[adj.serial_number]) for adj in adjs]
-
+            adjs = [h for h in ns.search(node.get_coord(), 3, "A")]
+            adjs += [h for h in ns.search(node.get_coord(), 6, "A")]
+            adjs += [h for h in ns.search(node.get_coord(), 9, "A")]
+            my_edges += [
+                (nodes_i[node.serial_number], nodes_i[adj.serial_number])
+                for adj in adjs
+            ]
 
         print("end treshold loop ", fname)
         # build pytorch data graph
@@ -357,7 +401,7 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
                     label_node,
                     atom_type_node,
                     element_node,
-                    hydrogen_label[node]
+                    hydrogen_label[node],
                 ]
             }
 
@@ -372,21 +416,19 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
     return global_G
 
 
-"""
-Compute euclidian distance between pair of coordinates
-"""
-
-
-def euclidean_distance(p, q: float) -> float:
+def euclidean_distance(p:float, q: float) -> float:
+    """
+    Compute euclidian distance between pair of coordinates
+    """
     return math.sqrt(((p[0] - q[0]) ** 2) + ((p[1] - q[1]) ** 2) + ((p[2] - q[2]) ** 2))
 
 
-def save_graphs(global_G, dirname):
+def save_graphs(global_G: dict, dirname: str) -> None:
     my_files = list(os.walk(dirname))[0][2]
     torch.save(global_G, dirname + "/tensorG_{}.pt".format(len(my_files)))
 
 
-def write_cache(cache_fname, cache_list):
+def write_cache(cache_fname: str, cache_list: list) -> None:
     with open(cache_fname, "a") as f:
         for k in cache_list:
             f.writelines(k + "\n")
