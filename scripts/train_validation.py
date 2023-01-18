@@ -114,9 +114,9 @@ def test(data_loader):
         mse += ((out - ref) ** 2).mean().item()
         mae += abs(out - ref).mean().item()
         num_examples += out.size(0)
-
-    mse /= num_examples
-    mae /= num_examples
+    #remove
+    #mse /= num_examples
+    #mae /= num_examples
 
     return mse, mae
  
@@ -211,17 +211,20 @@ if __name__ == "__main__":
     seed = 4
     k = 10
     g10 = math.ceil((len(graph_list)*k)/100)
+    random.Random(seed).shuffle(graph_list)
     for i in range(k):
         device = torch.device("cuda:0")
         model = GCN(model_num_feature)
         model.to(device)
-        #optimizer = torch.optim.SGD(model.parameters(), lr= 0.004, momentum=0.9) # Define optimizer.
-        optimizer = torch.optim.Adam(model.parameters())
+        optimizer = torch.optim.SGD(model.parameters(), lr= 0.004, momentum=0.9) # Define optimizer.
+        #optimizer = torch.optim.Adam(model.parameters())
 
-        random.Random(seed).shuffle(graph_list)
-        test_set = graph_list[:g10]
-        train_set = graph_list[g10:]
+        
+        test_set = graph_list[i*g10:(i+1)*g10]
 
+    
+        train_set = np.setdiff1d(graph_list,test_set)
+    
         # train the model using train and evaluate it using test
         loader = DataLoader(train_set, batch_size=batch_size,shuffle=True)
         print("end data loader")
