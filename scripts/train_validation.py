@@ -222,8 +222,10 @@ if __name__ == "__main__":
         
         test_set = graph_list[i*g10:(i+1)*g10]
 
-    
-        train_set = np.setdiff1d(graph_list,test_set)
+        #alternative
+        train_set = [graph for graph in graph_list if graph not in test_set]
+        #train_set = list(np.setdiff1d(graph_list,test_set))
+        
     
         # train the model using train and evaluate it using test
         loader = DataLoader(train_set, batch_size=batch_size,shuffle=True)
@@ -239,7 +241,7 @@ if __name__ == "__main__":
         
         loader=DataLoader(test_set,batch_size=batch_size)
         mse,mae = test(loader) 
-        with open('./k_fold_mse_ADAM.txt','a') as f:
+        with open('./k_fold_mse_correction_SGD.txt','a') as f:
             f.write('##### FOLD {}, MSE {}, MAE{}, ##### \n'.format(i,mse,mae))
 
         print('##### FOLD {}, MSE {}, MAE {}, #####'.format(i,mse,mae))
