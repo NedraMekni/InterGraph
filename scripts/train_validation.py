@@ -102,21 +102,26 @@ def train(data_loader):
 
 def test(data_loader):
     global model
-    mse = 0.0
-    mae = 0.0
+    mse = []
+    mae = []
     num_examples = 0
+    print('IN TEST')
     for idx, data in enumerate(data_loader):
         data = data.to(device)
         ref = data.y
         out = model(data.x, data.edge_index, data.batch)
-
+        ref = [yr.item() for yr in ref] # y real
+        out = [yp.item() for yp in out] # y predicted
         # Compute mean squared error and mean absolute error
-        mse += ((out - ref) ** 2).mean().item()
-        mae += abs(out - ref).mean().item()
-        num_examples += out.size(0)
+        print(out, ref)
+        mse += [(yr - yp) ** 2 for yr,yp in zip(ref,out)]
+        mae += [abs(yr - yp) for yr,yp in zip(ref,out)] 
+        print(mse, mae)
+        num_examples += len(out)
     #remove
-    #mse /= num_examples
-    #mae /= num_examples
+    print(num_examples,mse,mae)
+    mse = sum(mse)/num_examples
+    mae = sum(mae)/num_examples
 
     return mse, mae
  
@@ -231,6 +236,7 @@ if __name__ == "__main__":
         loader = DataLoader(train_set, batch_size=batch_size,shuffle=True)
         print("end data loader")
         loss_values = []
+
         for epoch in range(5501):
             loss_init = train(loader)
             torch.cuda.empty_cache()
@@ -241,7 +247,7 @@ if __name__ == "__main__":
         
         loader=DataLoader(test_set,batch_size=batch_size)
         mse,mae = test(loader) 
-        with open('./k_fold_mse_correction_SGD.txt','a') as f:
+        with open('./k_fold_mse_correction_SGD_2.txt','a') as f:
             f.write('##### FOLD {}, MSE {}, MAE{}, ##### \n'.format(i,mse,mae))
 
         print('##### FOLD {}, MSE {}, MAE {}, #####'.format(i,mse,mae))
