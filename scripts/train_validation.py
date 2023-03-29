@@ -45,11 +45,11 @@ class GCN(torch.nn.Module):
         torch.manual_seed(1234)
         self.conv1 = GCNConv(num_features, 16)
         self.batchnorm1 = nn.BatchNorm1d(16)
-        self.conv2 = GCNConv(16, 64)
-        self.batchnorm2 = nn.BatchNorm1d(64)
-        self.conv3 = GCNConv(64, 64)
-        self.batchnorm3 = nn.BatchNorm1d(64)
-        self.classifier = Linear(64, 1)
+        self.conv2 = GCNConv(16, 32)
+        self.batchnorm2 = nn.BatchNorm1d(32)
+        self.conv3 = GCNConv(32, 32)
+        self.batchnorm3 = nn.BatchNorm1d(32)
+        self.classifier = Linear(32, 1)
       
    
     def forward(self, x, edge_index,batch):
@@ -97,13 +97,15 @@ def train(data_loader):
         del data
         torch.cuda.empty_cache()
         gc.collect()
-    
+   
     return loss
 
 def test(data_loader):
     global model
     mse = []
     mae = []
+    out_g = []
+    ref_g = []
     num_examples = 0
     print('IN TEST')
     for idx, data in enumerate(data_loader):
@@ -118,12 +120,15 @@ def test(data_loader):
         mae += [abs(yr - yp) for yr,yp in zip(ref,out)] 
         print(mse, mae)
         num_examples += len(out)
+        ref_g += ref
+        out_g += out
+
     #remove
     print(num_examples,mse,mae)
     mse = sum(mse)/num_examples
     mae = sum(mae)/num_examples
 
-    return mse, mae
+    return mse, mae, ref_g, out_g
  
 
 
@@ -221,36 +226,50 @@ if __name__ == "__main__":
         device = torch.device("cuda:0")
         model = GCN(model_num_feature)
         model.to(device)
-        optimizer = torch.optim.SGD(model.parameters(), lr= 0.004, momentum=0.9) # Define optimizer.
-        #optimizer = torch.optim.Adam(model.parameters())
+        #optimizer = torch.optim.SGD(model.parameters(), lr= 0.004, momentum=0.9) # Define optimizer.
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
         
         test_set = graph_list[i*g10:(i+1)*g10]
 
         #alternative
         train_set = [graph for graph in graph_list if graph not in test_set]
+        print('n training set {}'.format(len(train_set)))
         #train_set = list(np.setdiff1d(graph_list,test_set))
         
-    
+        
         # train the model using train and evaluate it using test
         loader = DataLoader(train_set, batch_size=batch_size,shuffle=True)
+        
         print("end data loader")
         loss_values = []
 
-        for epoch in range(5501):
+        #for epoch in range(5501):
+        for epoch in range(2):
             loss_init = train(loader)
             torch.cuda.empty_cache()
             loss_values.append(loss_init)
             print('\t ##### FOLD {}, EPOCH {}, LOSS {} #####'.format(i,epoch,loss_init))
+            with open('./train_2epoch.txt', 'a') as t:
+                t.write(f"{epoch} {loss_init}\n")
         
         # Now use trained model for testing
         
         loader=DataLoader(test_set,batch_size=batch_size)
-        mse,mae = test(loader) 
-        with open('./k_fold_mse_correction_SGD_2.txt','a') as f:
-            f.write('##### FOLD {}, MSE {}, MAE{}, ##### \n'.format(i,mse,mae))
+        mse,mae,out_g,ref_g = test(loader) 
+        
+        exit()
+        if i==1:#2nd fold
+            # print the graph
+            with open('./test_2epochs.txt', 'a') as t:
+                t.write('TRUE VALUE {}, PREDICTED VALUE {} \n'.format(ref_g,out_g))
+            
+        exit()
+        with open('./k_fold_mse_correction_SGD_2a_b.txt','a') as f:
+            f.write('##### FOLD {}, MSE {}, MAE {}, ##### \n'.format(i,mse,mae))
 
         print('##### FOLD {}, MSE {}, MAE {}, #####'.format(i,mse,mae))
+        break
         
 
 
@@ -259,5 +278,6 @@ if __name__ == "__main__":
         del model
         torch.cuda.empty_cache()
         gc.collect()
+       
         
 

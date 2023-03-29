@@ -111,7 +111,7 @@ def retrieve_chembl_data(fname,checkpoint):
 
         print(prot_chembl_id, prot_uniprot_id, pref_name)
         prot_activities = activity.filter(target_chembl_id=prot_chembl_id).filter(
-            standard_type="IC50", 
+            standard_type="Ki", 
             standard_units="nM",
             assay_type  = 'B'
         )

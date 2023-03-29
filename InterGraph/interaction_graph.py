@@ -15,8 +15,8 @@ from itertools import product
 from typing import Tuple, Any, Dict
 
 
-pdb_raw_d = "/data/shared/projects/NLRP3/data/"
-
+#pdb_raw_d = "/data/shared/projects/NLRP3/data/"
+pdb_raw_d = "/data/shared/projects/NLRP3/data_ki/"
 
 def file_path(data_raw_path, pdb_raw_path, csv_path, IFG_path):
     """

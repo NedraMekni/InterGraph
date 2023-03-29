@@ -2,7 +2,7 @@
 
 SNAPSHOT_DIR="/data/shared/projects/NLRP3/IntegraphSnapshots" 
 INCREMENTAL_DIR="/data/shared/projects/NLRP3/incremental_data"
-SNAPSHOT_N=11
+SNAPSHOT_N=9
 
 rm -rf $INCREMENTAL_DIR
 mkdir $INCREMENTAL_DIR

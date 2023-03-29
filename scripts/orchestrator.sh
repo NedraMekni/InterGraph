@@ -1,7 +1,10 @@
 #!/bin/bash
 
-SNAPSHOT_DIR="/data/shared/projects/NLRP3/IntegraphSnapshots" 
-INCREMENTAL_DIR="/data/shared/projects/NLRP3/incremental_data"
+#SNAPSHOT_DIR="/data/shared/projects/NLRP3/IntegraphSnapshots" 
+#INCREMENTAL_DIR="/data/shared/projects/NLRP3/incremental_data"
+
+SNAPSHOT_DIR="/data/shared/projects/NLRP3/data_ki/IntegraphSnapshots"
+INCREMENTAL_DIR="/data/shared/projects/NLRP3/data_ki/incremental_data"
 
 conda activate graph_env
 python3 get_structures.py

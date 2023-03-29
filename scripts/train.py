@@ -156,7 +156,7 @@ if __name__ == "__main__":
     num_features = pytg_graph_dict[k0].num_node_features
     model = GCN(pytg_graph_dict[k0].num_node_features)
     model.to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr= 0.1, momentum=0.9) # Define optimizer.
+    optimizer = torch.optim.SGD(model.parameters(), lr= 0.008, momentum=0.9) # Define optimizer.
     #optimizer = torch.optim.Adam(model.parameters(), lr=0.00004) # Define optimizer.
   
     graph_list = []
@@ -172,7 +172,7 @@ if __name__ == "__main__":
             graph_list.append(new_g) 
             graph_y.append(pytg_graph_dict[k].y)
     
-    batch_size = 10
+    batch_size = 6
     print(len(graph_list))
     limit_g = (len(graph_list)//batch_size)*batch_size
     graph_list = graph_list[:limit_g]
@@ -198,10 +198,10 @@ if __name__ == "__main__":
 
         loss_values.append(loss_init)
         print('##### EPOCH {} #####'.format(epoch))
-        with open("result_10.txt", 'a') as out:
+        with open("result_nn_settings_val_8bs.txt", 'a') as out:
             out.write(f"Epoch: {epoch:03d}, loss: {loss_init:.4f}, min_loss: {min(loss_values):.4f} \n")
         print(f"Epoch: {epoch:03d}, loss: {loss_init:.4f}")
-    with open("loss_for_plot_2.txt","w") as out:
+    with open("loss_for_plot_8bs.txt","w") as out:
         out.write(str(loss_values))
                     
     print(loss_values)

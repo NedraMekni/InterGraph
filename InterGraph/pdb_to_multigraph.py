@@ -151,7 +151,7 @@ def biograph_from_file(dirname: str) -> dict:
     return graph_dict, my_files
 
 
-def data_activities_from_file(dirname, fname: str) -> dict:
+def data_activities_from_file(dirname, fname: str, log_transform = True) -> dict:
     """
     Extract data and activities from a file.
 
@@ -182,8 +182,9 @@ def data_activities_from_file(dirname, fname: str) -> dict:
 
                 try:
                     v = float(elements[1])
-                    v = v * (10**-9)
-                    v = -math.log10(v)
+                    if log_transform:
+                        v = v * (10**-9)
+                        v = -math.log10(v)
                     y_dict[k].append(v)
 
                 except:
@@ -193,11 +194,11 @@ def data_activities_from_file(dirname, fname: str) -> dict:
     return y_dict
 
 
-def filter_with_y(graph_dict: dict, y_dict: dict) -> dict:
+def filter_with_y(graph_dict: dict, y_dict: dict, pre="_1") -> dict:
     return {
         k: graph_dict[k]
         for k in graph_dict.keys()
-        if k.split("_")[0] + "_1" in y_dict.keys()
+        if k.split("_")[0] + pre in y_dict.keys()
     }
 
 
@@ -258,7 +259,7 @@ def store_element_cache(fname: str, cache_list: list) -> None:
             f.write(el + "\n")
 
 
-def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
+def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str, pre = "_1") -> dict:
     """
     Build a graph dictionary from a y dictionary and a path to an OHE file.
 
@@ -325,7 +326,7 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
     graph_dict = {
         k: graph_dict[k]
         for k in graph_dict.keys()
-        if k.split("_")[0] + "_1" in y_dict.keys()
+        if k.split("_")[0] + pre  in y_dict.keys()
     }
     for fname in graph_dict.keys():
         print("building adjacence list of ", fname)
@@ -344,15 +345,24 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
         # bulding H label for each node
         # for each atom in atom struct extract the n of H
         hydrogen_label = {}
+        valid_h_pdb = True
         for atom in atom_p:
             neighbour_atoms = list(atom.bonds)
             n_hydro = len(
                 [bond[1].element for bond in neighbour_atoms if bond[1].element == "H"]
             )
             n_hydro_hot = [0] * 5
-            assert n_hydro < 5
+            if n_hydro >=5:
+                valid_h_pdb = False
+                break
+            #assert n_hydro < 5
             n_hydro_hot[n_hydro] = 1
             hydrogen_label[atom.id] = n_hydro_hot
+        if not valid_h_pdb:
+            print(fname," not valid")
+            continue
+        else:
+            print(fname, " valid")
 
         # Multigraph generation
         # Find adjacencies for each node in nodes_p and add them to my_edges
@@ -374,7 +384,7 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str) -> dict:
         graph_data_x = torch.tensor(nodes_p_tensor, dtype=torch.float, device=device)
         graph_edge = torch.tensor(my_edges, dtype=torch.long, device=device)
         y_tensor = torch.tensor(
-            [[y_dict[fname.split("_")[0] + "_1"][0]]], dtype=torch.float, device=device
+            [[y_dict[fname.split("_")[0] + pre][0]]], dtype=torch.float, device=device
         )
 
         G = Data(
