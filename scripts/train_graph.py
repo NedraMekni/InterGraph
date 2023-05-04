@@ -43,9 +43,9 @@ class GCN(torch.nn.Module):
     def __init__(self, num_features):
         super().__init__()
         torch.manual_seed(1234)
-        self.conv1 = GCNConv(num_features, 16)
-        self.batchnorm1 = nn.BatchNorm1d(16)
-        self.conv2 = GCNConv(16, 32)
+        self.conv1 = GCNConv(num_features, 32)
+        self.batchnorm1 = nn.BatchNorm1d(32)
+        self.conv2 = GCNConv(32, 32)
         self.batchnorm2 = nn.BatchNorm1d(32)
         self.conv3 = GCNConv(32, 32)
         self.batchnorm3 = nn.BatchNorm1d(32)
@@ -303,7 +303,7 @@ if __name__ == "__main__":
         res_val = []
         res_train=[]
         loss_values = []
-        EPOCH = 1000
+        EPOCH = 300
         for epoch in range(EPOCH):
             loss_init = train(loader_train)
             
@@ -314,14 +314,14 @@ if __name__ == "__main__":
             mse_train,mae_train,ref_g_train,out_g_train = test(loader_train)
             res_val+=[(loss_init,mse_val,mae_val)]
             res_train+=[(loss_init,mse_train,mae_train)]
-            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_1k_adamw_2.txt','a') as f:
+            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_300_adamw_2.txt','a') as f:
                 f.write('{},{}\n'.format(ref_g_train,out_g_train))
-            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_1k_adamw_2.txt','a') as f:
+            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_300_adamw_2.txt','a') as f:
                 f.write('{},{}\n'.format(ref_g_val,out_g_val))  
             torch.cuda.empty_cache()
-        with open('train_ki_external_relu_batch_32_2_lr_2_1k_adamw_2.txt','w') as f:
+        with open('train_ki_external_relu_batch_32_2_lr_2_300_adamw_2.txt','w') as f:
             f.write(str(res_train))
-        with open('validation_ki_external_relu_batch_32_2_lr_2_1k_adamw_2.txt','w') as f:
+        with open('validation_ki_external_relu_batch_32_2_lr_2_300_adamw_2.txt','w') as f:
             f.write(str(res_val))
         # Now use trained model for testing
         #export model
@@ -329,7 +329,7 @@ if __name__ == "__main__":
         loader_test=DataLoader(test_set,batch_size=batch_size)
         mse_test,mae_test,ref_g_test,out_g_test = test(loader_test)
 
-        with open('test_ki_external_relu_batch_32_2_lr_2_1k_adamw_2.txt','w') as f:
+        with open('test_ki_external_relu_batch_32_2_lr_2_300_adamw_2.txt','w') as f:
             f.write('test MSE, MAE:\n{}, {}'.format(mse_test,mae_test))
 
         exit()
