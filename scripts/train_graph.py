@@ -113,6 +113,7 @@ def test(data_loader):
     num_examples = 0
     print('IN TEST')
     loss = 0.0
+    num_batch = 0
     for idx, data in enumerate(data_loader):
         data = data.to(device)
         ref = data.y
@@ -134,11 +135,12 @@ def test(data_loader):
         num_examples += len(out)
         ref_g += ref
         out_g += out
+        num_batch+=1
 
+    mse_tot=mse_tot/num_batch
+    mae_tot=mae_tot/num_batch
     print("TEST num_examples {}".format(num_examples))
     print("TEST MSE_TOT = {}, LOSS = {}".format(mse_tot,loss))
-    #mse = sum(mse)/num_examples
-    #mae = sum(mae)/num_examples
 
     return mse_tot, mae_tot, ref_g, out_g
  
@@ -181,26 +183,18 @@ def export_model(model, optimizer, epoch, loss):
             'loss': loss,
             }, fname)
 def get_dicts():
-    from_graph = 0
-    if os.path.exists("./.loaded_graph"):
-        with open("./.loaded_graph", "r") as f:
-            from_graph = int(f.readline())+1
     global_G={}
     files = os.listdir(ROOT_PATH+'/cached_graph')
     files = [x for x in files if x [-3:]=='.pt']
-    files = [x for x in files if int(x.split("_")[1].split(".")[0]) >= from_graph and int(x.split("_")[1].split(".")[0]) < from_graph + window_graph]
-    print(files)
-    if len(files) == 0:
-        print("NO MORE FILES TO LOAD")
+
     files = [ROOT_PATH+'/cached_graph/' + x for x in files] #select all .pt files
-    with open('./.loaded_graph','w') as f:
-        f.write(str(from_graph+len(files)-1))
 
     
     for f in files:
         local_g= torch.load(f)
         global_G ={**local_g,**global_G} #merge two dicts
-    
+    print(len(global_G.keys()))
+    exit()
     return global_G
 
 def dissect(uni_graph):
@@ -277,34 +271,37 @@ if __name__ == "__main__":
 
     #seed = 9
     seed = 4
-    k = 10
+    k = 20
     g10 = math.ceil((len(graph_list)*k)/100)
     random.Random(seed).shuffle(graph_list)
     for i in range(k):
         device = torch.device("cuda:0")
-        model, optimizer = load_model(model_num_feature,device) 
-        #model.to(device)
+        model = GCN(model_num_feature) 
+        model.to(device)
         #optimizer = torch.optim.SGD(model.parameters(), lr= 0.004, momentum=0.9) # Define optimizer.
         #optimizer = torch.optim.SGD(model.parameters())
         #optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
-        #optimizer = torch.optim.AdamW(model.parameters())
+        optimizer = torch.optim.AdamW(model.parameters(),lr=0.00001)
 
         
         #test_set = graph_list[:34] 
-        test_set = graph_list[i*g10:(i+1)*g10]
-        #alternative
-        train_set = [graph for graph in graph_list if graph not in test_set]
+        test_set = graph_list[i*g10:((i+1)*g10)//2]
+        validation_set = graph_list[((i+1)*g10)//2:(i+1)*g10]
+        
+        train_set = [graph for graph in graph_list if graph not in test_set and graph not in validation_set]
+        
+        assert len([x for x in train_set if x in validation_set+test_set])==0
         print('n training set {}'.format(len(train_set)))
         #train_set = list(np.setdiff1d(graph_list,test_set))
         
         
         # train the model using train and evaluate it using test
         loader_train = DataLoader(train_set, batch_size=batch_size)#,shuffle=True)
-        loader_test=DataLoader(test_set,batch_size=batch_size)
-
+        loader_validation = DataLoader(validation_set,batch_size=batch_size)
+        
         print("end data loader")
-        res = []
-        res_t=[]
+        res_val = []
+        res_train=[]
         loss_values = []
         EPOCH = 1000
         for epoch in range(EPOCH):
@@ -313,18 +310,28 @@ if __name__ == "__main__":
             torch.cuda.empty_cache()
             loss_values.append(loss_init)
             #plot
-            mse,mae,out_g,ref_g = test(loader_test) 
-            mse_t,mae_t,out_g_t,ref_g_t = test(loader_train)
-            res+=[(loss_init,mse,mae)]
-            res_t+=[(loss_init,mse_t,mae_t)]
-            print(res)
-            print(res_t)
+            mse_val,mae_val,ref_g_val,out_g_val = test(loader_validation) 
+            mse_train,mae_train,ref_g_train,out_g_train = test(loader_train)
+            res_val+=[(loss_init,mse_val,mae_val)]
+            res_train+=[(loss_init,mse_train,mae_train)]
+            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_1k_adamw_2.txt','a') as f:
+                f.write('{},{}\n'.format(ref_g_train,out_g_train))
+            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_1k_adamw_2.txt','a') as f:
+                f.write('{},{}\n'.format(ref_g_val,out_g_val))  
             torch.cuda.empty_cache()
-        with open('train_adam_ki_external_incremental_0.txt','w') as f:
-            f.write(str(res_t))
+        with open('train_ki_external_relu_batch_32_2_lr_2_1k_adamw_2.txt','w') as f:
+            f.write(str(res_train))
+        with open('validation_ki_external_relu_batch_32_2_lr_2_1k_adamw_2.txt','w') as f:
+            f.write(str(res_val))
         # Now use trained model for testing
         #export model
-        export_model(model, optimizer, EPOCH, loss_values[-1])
+
+        loader_test=DataLoader(test_set,batch_size=batch_size)
+        mse_test,mae_test,ref_g_test,out_g_test = test(loader_test)
+
+        with open('test_ki_external_relu_batch_32_2_lr_2_1k_adamw_2.txt','w') as f:
+            f.write('test MSE, MAE:\n{}, {}'.format(mse_test,mae_test))
+
         exit()
         
         if i==1:
