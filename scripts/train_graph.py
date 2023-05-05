@@ -193,11 +193,11 @@ def get_dicts():
     files = [ROOT_PATH+'/cached_graph/' + x for x in files] #select all .pt files
 
     pytg_graph_dict = {}
+    outliers = ['1SL3','2I4U','4DJO','4DJR']
+
     for f in files:
         local_G= torch.load(f)
         for k in local_G.keys():
-            outliers = ['1SL3','2I4U','4DJO','4DJR']
-            for k in global_G:
             if k.split('.')[0] in outliers:
                 print('Identify outlier')
                 continue 
