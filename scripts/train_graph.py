@@ -191,10 +191,9 @@ def get_dicts():
 
     
     for f in files:
-        local_g= torch.load(f)
-        global_G ={**local_g,**global_G} #merge two dicts
+        global_G.update(torch.load(f)) #merge two dicts
     print(len(global_G.keys()))
-    exit()
+    
     return global_G
 
 def dissect(uni_graph):
@@ -229,7 +228,13 @@ if __name__ == "__main__":
     print('end loading\n Dataset dimension <nGraphs> = {}'.format(len(global_G.keys())))
     
     pytg_graph_dict = {}
+    
+    outliers = ['1SL3','2I4U','4DJO','4DJR']
     for k in global_G:
+        if k.split('.')[0] in outliers:
+            print('Identify outlier')
+            continue 
+
         feat_k = global_G[k][1] 
         pytg_graph_dict[k] = global_G[k][0]
         print(k)
@@ -237,7 +242,8 @@ if __name__ == "__main__":
 
         pytg_graph_dict[k].x = torch.tensor(new_x, dtype = torch.float)# ,device=device)
 
-    
+    del global_G
+    print('end loading pytg_graph_dict')
     """
     Function for training GCN model
     """
@@ -247,6 +253,7 @@ if __name__ == "__main__":
 
     graph_list = []
     graph_y = []
+
 
     for k in pytg_graph_dict.keys():
         print(pytg_graph_dict[k].y)
@@ -303,7 +310,7 @@ if __name__ == "__main__":
         res_val = []
         res_train=[]
         loss_values = []
-        EPOCH = 300
+        EPOCH = 50
         for epoch in range(EPOCH):
             loss_init = train(loader_train)
             
