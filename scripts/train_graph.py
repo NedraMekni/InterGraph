@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch_geometric.transforms as T
 import torch.nn.functional as F
+
 import gc
 import sklearn
 import random
@@ -36,7 +37,7 @@ optimizer = None
 
 model = None
 window_graph = 6
-"""
+""" 
 GCN extends torch.nn.module adding some properties and defying forward method
 """
 
@@ -54,13 +55,13 @@ class GCN(torch.nn.Module):
 
     def forward(self, x, edge_index,batch):
         h = self.conv1(x, edge_index)
-        h = h.ReLU()
+        h = F.relu(h)
         h = self.batchnorm1(h)
         h = self.conv2(h, edge_index)
-        h = h.ReLU()
+        h = F.relu(h)
         h = self.batchnorm2(h)
         h = self.conv3(h, edge_index)
-        h = h.ReLU()
+        h = F.relu(h)
         h = global_mean_pool(h,batch)
         out = self.classifier(h)
         
@@ -77,6 +78,7 @@ def train(data_loader):
    
     # https://stackoverflow.com/questions/71527963/how-can-i-send-a-data-loader-to-the-gpu-in-google-colab
     loss = 0.0
+    n_batches =0
     for idx, data in enumerate(data_loader):
         print(idx)
 
@@ -97,10 +99,11 @@ def train(data_loader):
         del out
         del loss_for_batch
         del data
+        n_batches+=1
         torch.cuda.empty_cache()
         gc.collect()
     
-    return loss
+    return loss/n_batches
 
 def test(data_loader):
     #global model
@@ -198,9 +201,11 @@ def get_dicts():
     for f in files:
         local_G= torch.load(f)
         for k in local_G.keys():
+            '''
             if len([o for o in outliers if o in k])>0:
                 print('Identify outlier')
-                continue 
+                continue
+            ''' 
             feat_k = local_G[k][1] 
             pytg_graph_dict[k] = local_G[k][0]
             new_x = [ reduce (lambda x,y:x+y,feat_k[int(el.item())]['attributes']) for el in pytg_graph_dict[k].x]
@@ -294,8 +299,8 @@ if __name__ == "__main__":
 
         
         #test_set = graph_list[:34] 
-        test_set = graph_list[i*g10:((i+1)*g10)//2]
-        validation_set = graph_list[((i+1)*g10)//2:(i+1)*g10]
+        validation_set = graph_list[i*g10:((i+1)*g10)//2]
+        test_set  = graph_list[((i+1)*g10)//2:(i+1)*g10]
         
         train_set = [graph for graph in graph_list if graph not in test_set and graph not in validation_set]
         
@@ -312,7 +317,7 @@ if __name__ == "__main__":
         res_val = []
         res_train=[]
         loss_values = []
-        EPOCH = 101
+        EPOCH = 100
         for epoch in range(EPOCH):
             loss_init = train(loader_train)
             
@@ -323,14 +328,14 @@ if __name__ == "__main__":
             mse_train,mae_train,ref_g_train,out_g_train = test(loader_train)
             res_val+=[(loss_init,mse_val,mae_val)]
             res_train+=[(loss_init,mse_train,mae_train)]
-            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_100_adamw_3.txt','a') as f:
+            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_100_adamw_4.txt','a') as f:
                 f.write('{},{}\n'.format(ref_g_train,out_g_train))
-            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_100_adamw_3.txt','a') as f:
+            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_100_adamw_4.txt','a') as f:
                 f.write('{},{}\n'.format(ref_g_val,out_g_val))  
             torch.cuda.empty_cache()
-        with open('train_ki_external_relu_batch_32_2_lr_2_100_adamw_3.txt','w') as f:
+        with open('train_ki_external_relu_batch_32_2_lr_2_100_adamw_4.txt','w') as f:
             f.write(str(res_train))
-        with open('validation_ki_external_relu_batch_32_2_lr_2_100_adamw_3.txt','w') as f:
+        with open('validation_ki_external_relu_batch_32_2_lr_2_100_adamw_4.txt','w') as f:
             f.write(str(res_val))
         # Now use trained model for testing
         #export model
@@ -338,7 +343,7 @@ if __name__ == "__main__":
         loader_test=DataLoader(test_set,batch_size=batch_size)
         mse_test,mae_test,ref_g_test,out_g_test = test(loader_test)
 
-        with open('test_ki_external_relu_batch_32_2_lr_2_100_adamw_3.txt','w') as f:
+        with open('test_ki_external_relu_batch_32_2_lr_2_100_adamw_4.txt','w') as f:
             f.write('test MSE, MAE:\n{}, {}'.format(mse_test,mae_test))
 
         exit()
