@@ -140,6 +140,8 @@ def test(data_loader):
         ref_g += ref
         out_g += out
         num_batch+=1
+        del data
+        del out
 
     mse_tot=mse_tot/num_batch
     mae_tot=mae_tot/num_batch
@@ -196,16 +198,17 @@ def get_dicts():
     files = [ROOT_PATH+'/cached_graph/' + x for x in files] #select all .pt files
 
     pytg_graph_dict = {}
-    outliers = ['1SL3','2I4U','4DJO','4DJR']
-
+    #outliers = ['1SL3','2I4U','4DJO','4DJR']
+    #outliers = ['1HVK','1M7Y','3LZS','3UTU','6CDL','1HVI']
+    
     for f in files:
         local_G= torch.load(f)
         for k in local_G.keys():
-            '''
-            if len([o for o in outliers if o in k])>0:
-                print('Identify outlier')
-                continue
-            ''' 
+            
+            #if len([o for o in outliers if o in k])>0:
+                #print('Identify outlier {}'.format(k))
+                #continue
+            
             feat_k = local_G[k][1] 
             pytg_graph_dict[k] = local_G[k][0]
             new_x = [ reduce (lambda x,y:x+y,feat_k[int(el.item())]['attributes']) for el in pytg_graph_dict[k].x]
@@ -283,8 +286,8 @@ if __name__ == "__main__":
 
 
 
-    #seed = 9
-    seed = 4
+    #seed = 4
+    seed = 9
     k = 20
     g10 = math.ceil((len(graph_list)*k)/100)
     random.Random(seed).shuffle(graph_list)
@@ -294,8 +297,8 @@ if __name__ == "__main__":
         model.to(device)
         #optimizer = torch.optim.SGD(model.parameters(), lr= 0.004, momentum=0.9) # Define optimizer.
         #optimizer = torch.optim.SGD(model.parameters())
-        #optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
-        optimizer = torch.optim.AdamW(model.parameters(),lr=0.000001)
+        #optimizer = torch.optim.Adam(model.parameters(), lr=0.000001)
+        optimizer = torch.optim.AdamW(model.parameters(),lr=0.00001)
 
         
         #test_set = graph_list[:34] 
@@ -303,7 +306,13 @@ if __name__ == "__main__":
         test_set  = graph_list[((i+1)*g10)//2:(i+1)*g10]
         
         train_set = [graph for graph in graph_list if graph not in test_set and graph not in validation_set]
-        
+        #outliers_train = [568,606,566]
+        #outliers_validation = [56,57,133]
+        #train_set = [v for i,v in enumerate(train_set) if i not in outliers_train ]
+        #validation_set = [v for i,v in enumerate(validation_set) if i not in outliers_validation ]
+        train_set = train_set[:(len(train_set)//batch_size)*batch_size]
+        validation_set = validation_set[:(len(validation_set)//batch_size)*batch_size]
+        test_set = test_set[:(len(test_set)//batch_size)*batch_size]
         assert len([x for x in train_set if x in validation_set+test_set])==0
         print('n training set {}'.format(len(train_set)))
         #train_set = list(np.setdiff1d(graph_list,test_set))
@@ -317,8 +326,9 @@ if __name__ == "__main__":
         res_val = []
         res_train=[]
         loss_values = []
-        EPOCH = 100
+        EPOCH = 600
         for epoch in range(EPOCH):
+            print('Epoch {}'.format(epoch))
             loss_init = train(loader_train)
             
             torch.cuda.empty_cache()
@@ -328,14 +338,14 @@ if __name__ == "__main__":
             mse_train,mae_train,ref_g_train,out_g_train = test(loader_train)
             res_val+=[(loss_init,mse_val,mae_val)]
             res_train+=[(loss_init,mse_train,mae_train)]
-            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_100_adamw_4.txt','a') as f:
+            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_600_adamw_12.txt','a') as f:
                 f.write('{},{}\n'.format(ref_g_train,out_g_train))
-            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_100_adamw_4.txt','a') as f:
+            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_600_adamw_12.txt','a') as f:
                 f.write('{},{}\n'.format(ref_g_val,out_g_val))  
             torch.cuda.empty_cache()
-        with open('train_ki_external_relu_batch_32_2_lr_2_100_adamw_4.txt','w') as f:
+        with open('train_ki_external_relu_batch_32_2_lr_2_600_adamw_12.txt','w') as f:
             f.write(str(res_train))
-        with open('validation_ki_external_relu_batch_32_2_lr_2_100_adamw_4.txt','w') as f:
+        with open('validation_ki_external_relu_batch_32_2_lr_2_600_adamw_12.txt','w') as f:
             f.write(str(res_val))
         # Now use trained model for testing
         #export model
@@ -343,7 +353,7 @@ if __name__ == "__main__":
         loader_test=DataLoader(test_set,batch_size=batch_size)
         mse_test,mae_test,ref_g_test,out_g_test = test(loader_test)
 
-        with open('test_ki_external_relu_batch_32_2_lr_2_100_adamw_4.txt','w') as f:
+        with open('test_ki_external_relu_batch_32_2_lr_2_600_adamw_12.txt','w') as f:
             f.write('test MSE, MAE:\n{}, {}'.format(mse_test,mae_test))
 
         exit()
