@@ -6,11 +6,11 @@ def pymol_istance(path_dir,complex_input):
     complex_w = (path_dir+complex_input.split("/")[-1].split(".")[0] +'_H'+'.pdb')	
 
     pymol.cmd.load(complex_input,'myprotein')	
-    pymol.cmd.select('chain A')
-    pymol.cmd.get_chains('chain A')
+    #pymol.cmd.select('chain A')
+    #pymol.cmd.get_chains('chain A')
     pymol.cmd.h_add()	
 
-    pymol.cmd.save(filename = complex_w, selection = 'chain A')
+    pymol.cmd.save(filename = complex_w)#, selection = 'chain A')
     pymol.cmd.delete(complex_w)
 
     

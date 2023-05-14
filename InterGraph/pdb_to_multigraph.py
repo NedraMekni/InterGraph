@@ -365,9 +365,11 @@ def build_graph_dict(graph_dict, y_dict: dict, ohe_path: str, pre = "_1") -> dic
             print(fname, " valid")
 
         # Multigraph generation
-        # Find adjacencies for each node in nodes_p and add them to my_edges
+        # Find adjacencies for each node in nodes_p that is HETATM add them to my_edges
 
         for k in nodes_p.keys():
+            if nodes_p_entry[k] == 'ATOM':
+                continue
             node = nodes_p[k]
             adjs = [h for h in ns.search(node.get_coord(), 3, "A")]
             adjs += [h for h in ns.search(node.get_coord(), 6, "A")]
