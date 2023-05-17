@@ -269,10 +269,17 @@ if __name__ == "__main__":
         print(pytg_graph_dict[k].y)
         new_g = pytg_graph_dict[k]
         print(new_g)
-        print(new_g.edge_index.size(dim=1))
-        if new_g.edge_index.size(dim=1)<= 4000000:
-            graph_list.append(new_g) 
-            graph_y.append(pytg_graph_dict[k].y)
+        try:
+            print(new_g.edge_index.size(dim=1))
+            if new_g.edge_index.size(dim=1)<= 4000000:
+                graph_list.append(new_g) 
+                graph_y.append(pytg_graph_dict[k].y)
+            else:
+                print("{} removed for edges limit".format(k))
+        except:
+            print("{} removed for error in reading edges - probably empty edge list".format(k))
+            continue
+    
     model_num_feature = pytg_graph_dict[k0].num_node_features
     del pytg_graph_dict
     
@@ -286,8 +293,8 @@ if __name__ == "__main__":
 
 
 
-    #seed = 4
-    seed = 9
+    seed = 4
+    #seed = 9
     k = 20
     g10 = math.ceil((len(graph_list)*k)/100)
     random.Random(seed).shuffle(graph_list)
@@ -326,7 +333,7 @@ if __name__ == "__main__":
         res_val = []
         res_train=[]
         loss_values = []
-        EPOCH = 600
+        EPOCH = 100
         for epoch in range(EPOCH):
             print('Epoch {}'.format(epoch))
             loss_init = train(loader_train)
@@ -338,14 +345,14 @@ if __name__ == "__main__":
             mse_train,mae_train,ref_g_train,out_g_train = test(loader_train)
             res_val+=[(loss_init,mse_val,mae_val)]
             res_train+=[(loss_init,mse_train,mae_train)]
-            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_600_adamw_12.txt','a') as f:
+            with open('train_ki_ref_out_train_relu_batch_32_2_lr_2_100_adamw_new_1.txt','a') as f:
                 f.write('{},{}\n'.format(ref_g_train,out_g_train))
-            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_600_adamw_12.txt','a') as f:
+            with open('train_ki_ref_out_val_relu_batch_32_2_lr_2_100_adamw_new_1.txt','a') as f:
                 f.write('{},{}\n'.format(ref_g_val,out_g_val))  
             torch.cuda.empty_cache()
-        with open('train_ki_external_relu_batch_32_2_lr_2_600_adamw_12.txt','w') as f:
+        with open('train_ki_external_relu_batch_32_2_lr_2_100_adamw_new_1.txt','w') as f:
             f.write(str(res_train))
-        with open('validation_ki_external_relu_batch_32_2_lr_2_600_adamw_12.txt','w') as f:
+        with open('validation_ki_external_relu_batch_32_2_lr_2_100_adamw_new_1.txt','w') as f:
             f.write(str(res_val))
         # Now use trained model for testing
         #export model
@@ -353,7 +360,7 @@ if __name__ == "__main__":
         loader_test=DataLoader(test_set,batch_size=batch_size)
         mse_test,mae_test,ref_g_test,out_g_test = test(loader_test)
 
-        with open('test_ki_external_relu_batch_32_2_lr_2_600_adamw_12.txt','w') as f:
+        with open('test_ki_external_relu_batch_32_2_lr_2_100_adamw_new_1.txt','w') as f:
             f.write('test MSE, MAE:\n{}, {}'.format(mse_test,mae_test))
 
         exit()
