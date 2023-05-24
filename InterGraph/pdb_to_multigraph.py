@@ -163,7 +163,7 @@ def data_activities_from_file(dirname, fname: str, log_transform = True) -> dict
     - dict: A dictionary containing data and activities extracted from the file.
     """
 
-    label = pd.read_csv(fname, usecols=[" pdb_code", " activity"])
+    label = pd.read_csv(fname, usecols=[" pdb_code", " activity"],dtype=str)
     label.to_csv(dirname + "/test_y.csv", index=False)
     all_rows = []
     y_dict = {}
@@ -249,7 +249,6 @@ def update_old_dict(
 
         os.remove(f)  # maybe it does not overwrite on save
         print("saving {}".format(f))
-
         torch.save(global_g, f)
 
 
