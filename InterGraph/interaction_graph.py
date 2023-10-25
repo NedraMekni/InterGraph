@@ -1,4 +1,3 @@
-import os.path
 import pandas as pd
 import os
 import pickle
@@ -6,56 +5,65 @@ import urllib.request
 import pandas as pd
 import numpy as np
 import networkx as nx
-import openbabel
-import typing
 import numpy.typing as npt
+import tqdm
 
-
-from tqdm import tqdm
+from openbabel import openbabel
 from rdkit import Chem
 from scipy.spatial.distance import cdist
 from itertools import product
-from openbabel import openbabel
 from typing import Tuple, Any, Dict
 
 
-pdb_raw_d = "../data/pdb_raw"
+#pdb_raw_d = "/data/shared/projects/NLRP3/data/"
+pdb_raw_d = "/data/shared/projects/NLRP3/data_ki/"
 
-
-def file_path():
+def file_path(data_raw_path, pdb_raw_path, csv_path, IFG_path):
     """
     This function creates data and pdb_raw subdirectories
     pdb_raw: unsplitted pdb
     """
 
-    if not os.path.exists("../data/data"):
-        os.makedirs("../data/data")
-    if not os.path.exists("../data/pdb_raw"):
-        os.makedirs("../data/pdb_raw")
+    pdb_raw_d = pdb_raw_path
+
+    if not os.path.exists(data_raw_path):
+        os.makedirs(data_raw_path)
+    if not os.path.exists(pdb_raw_path):
+        os.makedirs(pdb_raw_path)
+    if not os.path.exists(csv_path):
+        os.makedirs(csv_path)
+    if not os.path.exists(IFG_path):
+        os.makedirs(IFG_path)
 
 
 def get_pdb_components(pdb_id: str):
 
     """This function performs an HTTPS request to get PDBs from rcsb.org"""
-
-    pdb_r = urllib.request.urlretrieve(
-        "https://files.rcsb.org/download/{}.pdb".format(pdb_id),
-        "{}/{}.pdb".format(pdb_raw_d, pdb_id),
-    )
+    try:
+        pdb_r = urllib.request.urlretrieve(
+            "https://files.rcsb.org/download/{}.pdb".format(pdb_id),
+            "{}/{}.pdb".format(pdb_raw_d, pdb_id),
+        )
+    except:
+        pass
+    
     return get_pdb_components
 
 
 def parse_pdb(lig: str, filename: str) -> Tuple[list, list]:
     """This function splits proten-ligand file into ligand and protein for each PDB in /data/pdb_raw"""
+
     prot = []
     ligs = []
-
-    with open(filename, "r") as f:
-        for l in f:
-            if l.split()[0] == "ATOM":
-                prot += [l]
-            if len(l.split()) > 3 and l.split()[3] == lig:
-                ligs += [l]
+    try:
+        with open(filename, "r") as f:
+            for l in f:
+                if l.split()[0] == "ATOM":
+                    prot += [l]
+                if l.split()[0] == "HETATM" and len(l.split()) > 3 and l.split()[3] == lig:
+                    ligs += [l]
+    except:
+        pass                    
 
     return prot, ligs
 
@@ -69,7 +77,7 @@ def write_pdb(prot: str, lig: str, filename: str) -> None:
     with open(filename, "w") as f:
         for l in prot:
             f.write(l)
-            f.write("TER\n")
+        f.write("TER\n")
         for l in lig:
             f.write(l)
 
@@ -80,7 +88,6 @@ def write_ligand_pdb(lig: str, filename: str):
         for l in lig:
             l.split(",")
             f.write(l)
-            return f
 
 
 def load_structures() -> dict:
@@ -123,8 +130,7 @@ def load_structures() -> dict:
 
 
 def get_atom_type(atom: str) -> str:
-    exit()
-    """ This function identifies the unique protein atom types using rdkit modules"""
+    """This function identifies the unique protein atom types using rdkit modules"""
     AtomType = [
         atom.GetSymbol(),
         str(atom.GetExplicitValence()),
@@ -347,11 +353,10 @@ def mol_to_graph(
     for e1, e2 in g.edges:
         edge_index.append([e1, e2])
 
-    #
     return c_size, features, edge_index
 
 
-def save_structure(fname: str):
+def save_structure(fname: str, datadir: str):
     """This function generated multiple subdirestories for each protein-ligand system .
 
     Every subdirectory is named after its protein-ligand complex and it contains the input files required to generated the molecular graph:
@@ -380,12 +385,22 @@ def save_structure(fname: str):
 
                 prot, lig = parse_pdb(pdb_lig, pdb_raw_d + "/" + pdb_prot + ".pdb")
 
-                if not os.path.exists("../data/PDB/data/" + pdb_prot + "_" + pdb_lig):
-                    os.makedirs("../data/PDB/data/" + pdb_prot + "_" + pdb_lig)
+                if not os.path.exists(
+                    datadir+"/PDB/data/"
+                    + pdb_prot
+                    + "_"
+                    + pdb_lig
+                ):
+                    os.makedirs(
+                        datadir+"/PDB/data/"
+                        + pdb_prot
+                        + "_"
+                        + pdb_lig
+                    )
                     write_pdb(
                         prot,
                         lig,
-                        "../data/PDB/data/"
+                        datadir+"/PDB/data/"
                         + pdb_prot
                         + "_"
                         + pdb_lig
@@ -396,7 +411,7 @@ def save_structure(fname: str):
                         + ".pdb",
                     )
                     if not os.path.exists(
-                        "../data/PDB/data/"
+                        datadir+"/PDB/data/"
                         + pdb_prot
                         + "_"
                         + pdb_lig
@@ -406,7 +421,7 @@ def save_structure(fname: str):
                     ):
                         write_ligand_pdb(
                             lig,
-                            "../data/PDB/data/"
+                            datadir+"/PDB/data/"
                             + pdb_prot
                             + "_"
                             + pdb_lig
@@ -416,11 +431,15 @@ def save_structure(fname: str):
                         )
 
                         for file in os.listdir(
-                            "../data/PDB/data/" + pdb_prot + "_" + pdb_lig + "/"
+                            datadir+"/PDB/data/"
+                            + pdb_prot
+                            + "_"
+                            + pdb_lig
+                            + "/"
                         ):
                             if file.endswith(f"{pdb_lig}.pdb"):
                                 file_path = (
-                                    "../data/PDB/data/"
+                                    datadir+"/PDB/data/"
                                     + pdb_prot
                                     + "_"
                                     + pdb_lig
@@ -435,10 +454,20 @@ def save_structure(fname: str):
                                 mol.AddHydrogens()
                                 obConversion.WriteFile(
                                     mol,
-                                    "../data/PDB/data/"
+                                    datadir+"/PDB/data/"
                                     + pdb_prot
                                     + "_"
                                     + pdb_lig
                                     + "/"
                                     + f"{pdb_lig}.mol2",
                                 )
+                                obConversion.CloseOutFile()
+
+def merge_window(window_csv, final_csv, has_checkpoint):
+    if(not has_checkpoint):
+        os.system('cp '+window_csv+' '+final_csv)
+    else:
+        with open(window_csv,'r') as w:
+            with open(final_csv,'a') as f:
+                for l in w.readlines()[1:]:
+                    f.write(l)
