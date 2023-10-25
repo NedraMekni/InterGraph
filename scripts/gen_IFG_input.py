@@ -30,7 +30,7 @@ def parsePDB(lig, filename):
         for l in f:
             if l.split()[0] == "ATOM":
                 prot += [l]
-            if len(l.split()) > 3 and l.split()[3] == lig:
+            if l.split()[0] == "HETATM" and len(l.split()) > 3 and l.split()[3] == lig:
                 ligs += [l]
 
     return prot, ligs
@@ -59,14 +59,16 @@ if __name__ == "__main__":
     # mol2_output_path =
     pdb_prot_downloaded = []
 
-    with open("data.csv", "r") as f:
+    with open("/home/nmekni/Documents/NLRP3/InterGraph/data/csv/data.csv", "r") as f:
         lines = f.readlines()[1:]
         for l in lines:
-            # print(l)
+            
             pdb_prot_list, pdb_lig = (
                 l.strip().split(",")[2].strip(),
                 l.strip().split(",")[3].strip(),
             )
+            
+            
             pdb_prot_list = [x[:4] for x in pdb_prot_list.split()]
 
             # print(pdb_lig_list)
@@ -78,6 +80,8 @@ if __name__ == "__main__":
                     pdb_prot_downloaded += [pdb_prot]
 
                 prot, lig = parsePDB(pdb_lig, pdb_raw_d + "/" + pdb_prot + ".pdb")
+                print(lig)
+                exit()
 
                 if not os.path.exists("data/" + pdb_prot + "_" + pdb_lig):
                     os.makedirs("data/" + pdb_prot + "_" + pdb_lig)
