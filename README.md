@@ -60,7 +60,7 @@ Before constructing the multigraph representation, the input PDB file undergoes 
 
 The multigraph representation is constructed based on three distance thresholds from the ligand atoms. These thresholds define the proximity at which protein atoms interact with the ligand atoms and influence the connectivity of the multigraph.
 
-### Model Training
+## Model Training
 
 After generating the multigraph representations, the PDB files are used to train a Graph Convolutional Network (GCN) for the prediction of binding affinity. 
 
