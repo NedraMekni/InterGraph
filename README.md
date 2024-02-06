@@ -15,6 +15,23 @@ cd InterGraph
 python setup.py install
 ```
 
+### Package Functionality
+
+The package provides a comprehensive pipeline for modeling protein-ligand interactions and predicting binding affinity :
+
+- Clean the PDB file by removing salts, ions, metals, and water molecules.
+- Select the relevant chain containing the ligand in the case of multichain complexes.
+- Construct a multigraph representation of the protein-ligand complex based on user-defined distance thresholds.
+- Train a Graph Convolutional Network (GCN) using the generated PDB files to predict binding affinity.
+- Export the trained GCN model for future use.
+
+### Notebook
+
+For a detailed demonstration of the package usage and analysis workflow, refer to our Jupyter Notebook:
+
+[Link to Notebook](https://github.com/NedraMekni/multigraph-colab/blob/main/multi_g_generation.ipynb)
+
+
 ## Input File Description
 
 ### Overview
@@ -51,15 +68,7 @@ After generating the multigraph representations, the PDB files are used to train
 
 The trained GCN model can be exported from the package using the `model_trained` function. This allows users to save the trained model for future use or deployment in other applications.
 
-### Package Functionality
 
-The package provides a comprehensive pipeline for analyzing protein-ligand interactions:
-
-- Clean the PDB file by removing salts, ions, metals, and water molecules.
-- Select the relevant chain containing the ligand in the case of multichain complexes.
-- Construct a multigraph representation of the protein-ligand complex based on user-defined distance thresholds.
-- Train a Graph Convolutional Network (GCN) using the generated PDB files to predict binding affinity.
-- Export the trained GCN model for future use.
 
 ## Customization
 You can customize the distance thresholds used to build the multigraph representation. Simply modify the distance_thresholds list in the create_multigraph function call to suit your specific needs.
