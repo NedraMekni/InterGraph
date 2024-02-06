@@ -7,6 +7,16 @@ InterGraph
 
 General design GNN pipeline using protein-ligand interaction graph
 
+
+## Installation
+Install InterGraph master via 'git clone' and python setup install:
+'''
+git clone https://github.com/NedraMekni/InterGraph.git
+cd InterGraph
+python setup.py install
+'''
+
+
 ### Copyright
 
 Copyright (c) 2022, Nedra Mekni
